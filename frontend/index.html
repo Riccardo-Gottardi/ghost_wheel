@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ghost Wheel - Sprint 1 Debug</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.8;
+            font-size: 1.1em;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .panel h2 {
+            margin: 0 0 20px 0;
+            font-size: 1.5em;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+            padding-bottom: 10px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-connected {
+            background: #4CAF50;
+        }
+
+        .status-disconnected {
+            background: #f44336;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .steering-display {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .steering-wheel {
+            width: 150px;
+            height: 150px;
+            border: 6px solid #fff;
+            border-radius: 50%;
+            margin: 0 auto 20px;
+            position: relative;
+            transition: transform 0.1s ease;
+        }
+
+        .steering-wheel::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 60px;
+            height: 6px;
+            background: #fff;
+            transform: translate(-50%, -50%);
+            border-radius: 3px;
+        }
+
+        .steering-wheel::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 6px;
+            height: 60px;
+            background: #fff;
+            transform: translate(-50%, -50%);
+            border-radius: 3px;
+        }
+
+        .angle-value {
+            font-size: 2em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .data-label {
+            font-weight: bold;
+            opacity: 0.8;
+        }
+
+        .data-value {
+            font-family: 'Courier New', monospace;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .hands-visualization {
+            position: relative;
+            width: 100%;
+            height: 200px;
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+
+        .hand-point {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            transition: all 0.1s ease;
+        }
+
+        .hand-left {
+            background: #FF6B6B;
+        }
+
+        .hand-right {
+            background: #4ECDC4;
+        }
+
+        .confidence-bar {
+            width: 100%;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f44336, #ff9800, #4caf50);
+            border-radius: 10px;
+            transition: width 0.3s ease;
+        }
+
+        .steering-instructions {
+            text-align: center;
+            font-size: 0.9em;
+            color: #4ecdc4;
+            margin: 15px 0;
+            padding: 10px;
+            background: rgba(78, 205, 196, 0.1);
+            border-radius: 8px;
+            border: 1px solid rgba(78, 205, 196, 0.3);
+        }
+
+        .steering-status {
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: rgba(0,0,0,0.2);
+        }
+
+        .steering-straight { color: #4caf50; }
+        .steering-left { color: #ff6b6b; }
+        .steering-right { color: #4ecdc4; }
+
+        .log-container {
+            grid-column: 1 / -1;
+            height: 200px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .log-entry {
+            margin: 2px 0;
+            opacity: 0.8;
+        }
+
+        .log-entry.error {
+            color: #ff6b6b;
+        }
+
+        .log-entry.success {
+            color: #4caf50;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>👻 Ghost Wheel</h1>
+        <p>Sprint 1 - Hand Tracking Debug Interface</p>
+    </div>
+
+    <div class="dashboard">
+        <!-- Connection Status Panel -->
+        <div class="panel">
+            <h2>🔗 Connection Status</h2>
+            <div class="data-row">
+                <span class="data-label">WebSocket:</span>
+                <span class="data-value">
+                    <span id="connection-status" class="status-indicator status-disconnected"></span>
+                    <span id="connection-text">Disconnected</span>
+                </span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Server:</span>
+                <span class="data-value" id="server-address">ws://localhost:8765</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Last Update:</span>
+                <span class="data-value" id="last-update">Never</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Messages Received:</span>
+                <span class="data-value" id="message-count">0</span>
+            </div>
+        </div>
+
+        <!-- Steering Control Panel -->
+        <div class="panel">
+            <h2>🎮 Steering Control</h2>
+            
+            <div class="steering-display">
+                <div id="steering-wheel" class="steering-wheel"></div>
+                <div class="angle-value" id="steering-angle">0°</div>
+                <div class="data-row">
+                    <span class="data-label">Range:</span>
+                    <span class="data-value">-45° to +45°</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Status:</span>
+                    <span class="data-value" id="steering-status">Straight</span>
+                </div>
+                <div class="steering-instructions">
+                    📋 Level hands = Straight | Move hands up/down to steer
+                </div>
+            </div>
+        </div>
+
+        <!-- Hand Detection Panel -->
+        <div class="panel">
+            <h2>✋ Hand Detection</h2>
+            <div class="data-row">
+                <span class="data-label">Hands Detected:</span>
+                <span class="data-value" id="hands-count">0</span>
+            </div>
+            <div class="data-row">
+                <span class="data-label">Confidence:</span>
+                <span class="data-value" id="confidence-value">0%</span>
+            </div>
+            <div class="confidence-bar">
+                <div id="confidence-bar" class="confidence-fill" style="width: 0%"></div>
+            </div>
+            <div class="hands-visualization" id="hands-viz">
+                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.5;">
+                    Position your hands here
+                </div>
+            </div>
+        </div>
+
+        <!-- Hand Data Panel -->
+        <div class="panel">
+            <h2>📊 Hand Data</h2>
+            <div id="left-hand-data">
+                <h3 style="color: #FF6B6B;">🤚 Left Hand</h3>
+                <div class="data-row">
+                    <span class="data-label">Position X:</span>
+                    <span class="data-value" id="left-x">-</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Position Y:</span>
+                    <span class="data-value" id="left-y">-</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Confidence:</span>
+                    <span class="data-value" id="left-confidence">-</span>
+                </div>
+            </div>
+            <div id="right-hand-data" style="margin-top: 20px;">
+                <h3 style="color: #4ECDC4;">🤚 Right Hand</h3>
+                <div class="data-row">
+                    <span class="data-label">Position X:</span>
+                    <span class="data-value" id="right-x">-</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Position Y:</span>
+                    <span class="data-value" id="right-y">-</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Confidence:</span>
+                    <span class="data-value" id="right-confidence">-</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Debug Log -->
+        <div class="panel">
+            <h2>📝 Debug Log</h2>
+            <div id="debug-log" class="log-container"></div>
+        </div>
+    </div>
+
+    <script>
+        class GhostWheelDebugger {
+            constructor() {
+                this.websocket = null;
+                this.messageCount = 0;
+                this.isConnected = false;
+                this.reconnectInterval = null;
+                
+                this.init();
+            }
+
+            init() {
+                this.setupWebSocket();
+                this.log('Initializing Ghost Wheel Debug Interface...', 'success');
+            }
+
+            setupWebSocket() {
+                try {
+                    this.websocket = new WebSocket('ws://localhost:8765');
+                    
+                    this.websocket.onopen = () => {
+                        this.isConnected = true;
+                        this.updateConnectionStatus(true);
+                        this.log('Connected to Ghost Wheel backend', 'success');
+                        
+                        if (this.reconnectInterval) {
+                            clearInterval(this.reconnectInterval);
+                            this.reconnectInterval = null;
+                        }
+                    };
+
+                    this.websocket.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            this.handleHandData(data);
+                            this.messageCount++;
+                            this.updateMessageCount();
+                        } catch (error) {
+                            this.log(`Error parsing message: ${error.message}`, 'error');
+                        }
+                    };
+
+                    this.websocket.onclose = () => {
+                        this.isConnected = false;
+                        this.updateConnectionStatus(false);
+                        this.log('Connection lost. Attempting to reconnect...', 'error');
+                        this.scheduleReconnect();
+                    };
+
+                    this.websocket.onerror = (error) => {
+                        this.log(`WebSocket error: ${error}`, 'error');
+                    };
+
+                } catch (error) {
+                    this.log(`Failed to create WebSocket: ${error.message}`, 'error');
+                    this.scheduleReconnect();
+                }
+            }
+
+            scheduleReconnect() {
+                if (!this.reconnectInterval) {
+                    this.reconnectInterval = setInterval(() => {
+                        if (!this.isConnected) {
+                            this.log('Attempting to reconnect...', 'error');
+                            this.setupWebSocket();
+                        }
+                    }, 3000);
+                }
+            }
+
+            handleHandData(data) {
+                // Update last update time
+                document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+
+                // Update hands count
+                document.getElementById('hands-count').textContent = data.hands_detected || 0;
+
+                // Update steering angle
+                const steeringAngle = data.steering_angle || 0;
+                document.getElementById('steering-angle').textContent = `${steeringAngle.toFixed(1)}°`;
+                
+                // Update steering status
+                this.updateSteeringStatus(steeringAngle);
+                
+                // Rotate steering wheel visual
+                const steeringWheel = document.getElementById('steering-wheel');
+                steeringWheel.style.transform = `rotate(${steeringAngle}deg)`;
+
+                // Update confidence
+                const confidence = data.confidence || 0;
+                const confidencePercent = Math.round(confidence * 100);
+                document.getElementById('confidence-value').textContent = `${confidencePercent}%`;
+                document.getElementById('confidence-bar').style.width = `${confidencePercent}%`;
+
+                // Update hand positions
+                this.updateHandVisualization(data);
+                this.updateHandData(data);
+
+                // Log steering events
+                if (data.hands_detected >= 2 && confidence > 0.8) {
+                    this.log(`Steering: ${steeringAngle.toFixed(1)}° | Confidence: ${confidencePercent}%`);
+                }
+            }
+
+            updateSteeringStatus(angle) {
+                const statusElement = document.getElementById('steering-status');
+                
+                if (Math.abs(angle) < 2) {
+                    statusElement.textContent = 'Straight';
+                    statusElement.className = 'data-value steering-straight';
+                } else if (angle < 0) {
+                    statusElement.textContent = `Left ${Math.abs(angle).toFixed(1)}°`;
+                    statusElement.className = 'data-value steering-left';
+                } else {
+                    statusElement.textContent = `Right ${angle.toFixed(1)}°`;
+                    statusElement.className = 'data-value steering-right';
+                }
+            }
+
+            updateHandVisualization(data) {
+                const viz = document.getElementById('hands-viz');
+                
+                // Clear existing hand points
+                viz.querySelectorAll('.hand-point').forEach(point => point.remove());
+
+                // Add left hand
+                if (data.left_hand) {
+                    const leftPoint = document.createElement('div');
+                    leftPoint.className = 'hand-point hand-left';
+                    leftPoint.style.left = `${data.left_hand.wrist_x * 100}%`;
+                    leftPoint.style.top = `${data.left_hand.wrist_y * 100}%`;
+                    leftPoint.title = `Left Hand (${data.left_hand.confidence.toFixed(2)})`;
+                    viz.appendChild(leftPoint);
+                }
+
+                // Add right hand
+                if (data.right_hand) {
+                    const rightPoint = document.createElement('div');
+                    rightPoint.className = 'hand-point hand-right';
+                    rightPoint.style.left = `${data.right_hand.wrist_x * 100}%`;
+                    rightPoint.style.top = `${data.right_hand.wrist_y * 100}%`;
+                    rightPoint.title = `Right Hand (${data.right_hand.confidence.toFixed(2)})`;
+                    viz.appendChild(rightPoint);
+                }
+            }
+
+            updateHandData(data) {
+                // Left hand data
+                if (data.left_hand) {
+                    document.getElementById('left-x').textContent = data.left_hand.wrist_x.toFixed(3);
+                    document.getElementById('left-y').textContent = data.left_hand.wrist_y.toFixed(3);
+                    document.getElementById('left-confidence').textContent = `${(data.left_hand.confidence * 100).toFixed(1)}%`;
+                } else {
+                    document.getElementById('left-x').textContent = '-';
+                    document.getElementById('left-y').textContent = '-';
+                    document.getElementById('left-confidence').textContent = '-';
+                }
+
+                // Right hand data
+                if (data.right_hand) {
+                    document.getElementById('right-x').textContent = data.right_hand.wrist_x.toFixed(3);
+                    document.getElementById('right-y').textContent = data.right_hand.wrist_y.toFixed(3);
+                    document.getElementById('right-confidence').textContent = `${(data.right_hand.confidence * 100).toFixed(1)}%`;
+                } else {
+                    document.getElementById('right-x').textContent = '-';
+                    document.getElementById('right-y').textContent = '-';
+                    document.getElementById('right-confidence').textContent = '-';
+                }
+            }
+
+            updateConnectionStatus(connected) {
+                const statusIndicator = document.getElementById('connection-status');
+                const statusText = document.getElementById('connection-text');
+
+                if (connected) {
+                    statusIndicator.className = 'status-indicator status-connected';
+                    statusText.textContent = 'Connected';
+                } else {
+                    statusIndicator.className = 'status-indicator status-disconnected';
+                    statusText.textContent = 'Disconnected';
+                }
+            }
+
+            updateMessageCount() {
+                document.getElementById('message-count').textContent = this.messageCount;
+            }
+
+            log(message, type = 'info') {
+                const logContainer = document.getElementById('debug-log');
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-entry ${type}`;
+                
+                const timestamp = new Date().toLocaleTimeString();
+                logEntry.textContent = `[${timestamp}] ${message}`;
+                
+                logContainer.appendChild(logEntry);
+                logContainer.scrollTop = logContainer.scrollHeight;
+
+                // Keep only last 50 log entries
+                const entries = logContainer.querySelectorAll('.log-entry');
+                if (entries.length > 50) {
+                    entries[0].remove();
+                }
+            }
+        }
+
+        // Initialize the debugger when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new GhostWheelDebugger();
+        });
+    </script>
+</body>
+</html>
