@@ -3,78 +3,63 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ghost Wheel - Sprint 2 AR Interface</title>
+    <title>Ghost Wheel - Debug Mode</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
-            padding: 20px;
-            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            padding: 0;
+            background: #000;
             color: white;
-            min-height: 100vh;
+            overflow: hidden;
         }
 
         .header {
-            text-align: center;
-            margin-bottom: 30px;
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 8px;
         }
 
         .header h1 {
             margin: 0;
-            font-size: 2.5em;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-
-        .header p {
-            margin: 10px 0 0 0;
-            opacity: 0.8;
-            font-size: 1.1em;
-        }
-
-        .dashboard {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .panel {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            padding: 25px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        }
-
-        .panel h2 {
-            margin: 0 0 20px 0;
             font-size: 1.5em;
-            border-bottom: 2px solid rgba(255, 255, 255, 0.3);
-            padding-bottom: 10px;
+            color: #4ecdc4;
+        }
+
+        .status-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            min-width: 250px;
+            font-size: 0.9em;
+        }
+
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
         }
 
         .status-indicator {
             display: inline-block;
-            width: 12px;
-            height: 12px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
-            margin-right: 8px;
+            margin-right: 5px;
             animation: pulse 2s infinite;
         }
 
-        .status-connected {
-            background: #4CAF50;
-        }
-
-        .status-disconnected {
-            background: #f44336;
-        }
-
-        .status-processing {
-            background: #ff9800;
-        }
+        .status-connected { background: #4CAF50; }
+        .status-disconnected { background: #f44336; }
+        .status-loading { background: #ff9800; }
 
         @keyframes pulse {
             0% { opacity: 1; }
@@ -82,17 +67,22 @@
             100% { opacity: 1; }
         }
 
-        .steering-display {
-            text-align: center;
-            margin: 20px 0;
+        .controls-panel {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
         }
 
         .steering-wheel {
-            width: 150px;
-            height: 150px;
-            border: 6px solid #fff;
+            width: 60px;
+            height: 60px;
+            border: 3px solid #fff;
             border-radius: 50%;
-            margin: 0 auto 20px;
+            margin: 0 auto 10px;
             position: relative;
             transition: transform 0.1s ease;
         }
@@ -102,11 +92,11 @@
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 60px;
-            height: 6px;
+            width: 30px;
+            height: 3px;
             background: #fff;
             transform: translate(-50%, -50%);
-            border-radius: 3px;
+            border-radius: 2px;
         }
 
         .steering-wheel::after {
@@ -114,823 +104,619 @@
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 6px;
-            height: 60px;
+            width: 3px;
+            height: 30px;
             background: #fff;
             transform: translate(-50%, -50%);
-            border-radius: 3px;
+            border-radius: 2px;
         }
 
-        .angle-value {
-            font-size: 2em;
-            font-weight: bold;
-            margin: 10px 0;
-        }
-
-        .data-row {
-            display: flex;
-            justify-content: space-between;
-            margin: 10px 0;
-            padding: 8px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .data-label {
-            font-weight: bold;
-            opacity: 0.8;
-        }
-
-        .data-value {
-            font-family: 'Courier New', monospace;
-            background: rgba(0, 0, 0, 0.2);
-            padding: 2px 8px;
-            border-radius: 4px;
-        }
-
-        .ar-display {
-            width: 100%;
-            max-width: 400px;
-            margin: 20px auto;
-        }
-
-        .ar-video {
-            width: 100%;
-            border-radius: 10px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-        }
-
-        .ar-canvas {
-            width: 100%;
-            border-radius: 10px;
-            border: 2px solid rgba(78, 205, 196, 0.5);
-            margin-top: 10px;
-        }
-
-        .confidence-bar {
-            width: 100%;
-            height: 20px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            overflow: hidden;
-            margin: 10px 0;
-        }
-
-        .confidence-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #f44336, #ff9800, #4caf50);
-            border-radius: 10px;
-            transition: width 0.3s ease;
-        }
-
-        .hands-visualization {
-            position: relative;
-            width: 100%;
-            height: 200px;
-            border: 2px dashed rgba(255, 255, 255, 0.3);
-            border-radius: 10px;
-            margin: 20px 0;
-            overflow: hidden;
-        }
-
-        .hand-point {
+        #videoCanvas {
             position: absolute;
-            width: 20px;
-            height: 20px;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+        }
+
+        #arCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        .loading-text {
+            color: white;
+            font-size: 1.2em;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-top: 5px solid #4ecdc4;
             border-radius: 50%;
-            transform: translate(-50%, -50%);
-            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
-            transition: all 0.1s ease;
+            animation: spin 1s linear infinite;
         }
 
-        .hand-left {
-            background: #FF6B6B;
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
-        .hand-right {
-            background: #4ECDC4;
-        }
-
-        .ar-status {
-            font-weight: bold;
-            padding: 4px 8px;
-            border-radius: 4px;
-            background: rgba(0,0,0,0.2);
-        }
-
-        .ar-detected { color: #4caf50; }
-        .ar-processing { color: #ff9800; }
-        .ar-not-detected { color: #f44336; }
-
-        .log-container {
-            grid-column: 1 / -1;
-            height: 200px;
-            overflow-y: auto;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 10px;
+        .debug-panel {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
             padding: 15px;
+            border-radius: 8px;
+            max-width: 300px;
+            font-size: 0.8em;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .debug-log {
             font-family: 'Courier New', monospace;
-            font-size: 0.9em;
+            font-size: 0.8em;
+            color: #ccc;
         }
 
-        .log-entry {
-            margin: 2px 0;
-            opacity: 0.8;
-        }
-
-        .log-entry.error {
+        .debug-log .error {
             color: #ff6b6b;
         }
 
-        .log-entry.success {
+        .debug-log .success {
             color: #4caf50;
         }
 
-        .log-entry.warning {
+        .debug-log .warning {
             color: #ff9800;
-        }
-
-        .opencv-status {
-            text-align: center;
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 8px;
-            font-weight: bold;
-        }
-
-        .opencv-loading {
-            background: rgba(255, 152, 0, 0.2);
-            color: #ff9800;
-        }
-
-        .opencv-ready {
-            background: rgba(76, 175, 80, 0.2);
-            color: #4caf50;
-        }
-
-        .opencv-error {
-            background: rgba(244, 67, 54, 0.2);
-            color: #f44336;
-        }
-
-        @media (max-width: 768px) {
-            .dashboard {
-                grid-template-columns: 1fr;
-            }
         }
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/GLTFLoader.js"></script>
+    <!-- JSARToolKit TEMPORARILY DISABLED FOR DEBUGGING -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/jsartoolkit5@5.15.1/build/artoolkit.min.js"></script> -->
 </head>
 <body>
+    <div class="loading-screen" id="loadingScreen">
+        <div class="spinner"></div>
+        <div class="loading-text">
+            <div>🐛 Ghost Wheel - Debug Mode</div>
+            <div id="loadingStatus">Starting debug session</div>
+        </div>
+    </div>
+
     <div class="header">
-        <h1>👻 Ghost Wheel</h1>
-        <p>Sprint 2 - AR Surface Detection & Hand Tracking</p>
+        <h1>👻 Ghost Wheel AR</h1>
+        <small>🐛 Debug Mode - No JSARToolKit</small>
     </div>
 
-    <div class="dashboard">
-        <!-- Connection Status Panel -->
-        <div class="panel">
-            <h2>🔗 System Status</h2>
-            <div class="data-row">
-                <span class="data-label">WebSocket:</span>
-                <span class="data-value">
-                    <span id="connection-status" class="status-indicator status-disconnected"></span>
-                    <span id="connection-text">Disconnected</span>
-                </span>
-            </div>
-            <div class="data-row">
-                <span class="data-label">OpenCV.js:</span>
-                <span class="data-value">
-                    <span id="opencv-status" class="status-indicator status-disconnected"></span>
-                    <span id="opencv-text">Loading...</span>
-                </span>
-            </div>
-            <div class="data-row">
-                <span class="data-label">AR Stream:</span>
-                <span class="data-value">
-                    <span id="ar-stream-status" class="status-indicator status-disconnected"></span>
-                    <span id="ar-stream-text">Waiting...</span>
-                </span>
-            </div>
-            <div class="data-row">
-                <span class="data-label">Last Update:</span>
-                <span class="data-value" id="last-update">Never</span>
-            </div>
-            <div class="data-row">
-                <span class="data-label">Messages:</span>
-                <span class="data-value" id="message-count">0</span>
-            </div>
+    <div class="status-panel">
+        <div class="status-row">
+            <span>Backend Connection:</span>
+            <span>
+                <span id="backendStatus" class="status-indicator status-disconnected"></span>
+                <span id="backendStatusText">Disconnected</span>
+            </span>
         </div>
-
-        <!-- Steering Control Panel -->
-        <div class="panel">
-            <h2>🎮 Steering Control</h2>
-            <div class="steering-display">
-                <div id="steering-wheel" class="steering-wheel"></div>
-                <div class="angle-value" id="steering-angle">0°</div>
-                <div class="data-row">
-                    <span class="data-label">Range:</span>
-                    <span class="data-value">-45° to +45°</span>
-                </div>
-                <div class="data-row">
-                    <span class="data-label">Status:</span>
-                    <span class="data-value" id="steering-status">Straight</span>
-                </div>
-                <div class="data-row">
-                    <span class="data-label">Hands:</span>
-                    <span class="data-value" id="hands-count">0</span>
-                </div>
-                <div class="data-row">
-                    <span class="data-label">Confidence:</span>
-                    <span class="data-value" id="confidence-value">0%</span>
-                </div>
-                <div class="confidence-bar">
-                    <div id="confidence-bar" class="confidence-fill" style="width: 0%"></div>
-                </div>
-            </div>
+        <div class="status-row">
+            <span>Video Stream:</span>
+            <span>
+                <span id="videoStatus" class="status-indicator status-disconnected"></span>
+                <span id="videoStatusText">No Stream</span>
+            </span>
         </div>
-
-        <!-- AR Surface Panel -->
-        <div class="panel">
-            <h2>📹 AR Surface Detection</h2>
-            <div class="ar-display">
-                <img id="ar-video" class="ar-video" style="display: none;" alt="AR Camera Stream">
-                <canvas id="ar-canvas" class="ar-canvas" width="640" height="480"></canvas>
-            </div>
-            <div class="data-row">
-                <span class="data-label">Marker Status:</span>
-                <span class="data-value" id="marker-status">Not Detected</span>
-            </div>
-            <div class="data-row">
-                <span class="data-label">Markers Found:</span>
-                <span class="data-value" id="markers-count">0</span>
-            </div>
-            <div class="data-row">
-                <span class="data-label">Surface Valid:</span>
-                <span class="data-value" id="surface-status">No</span>
-            </div>
-            <div class="data-row">
-                <span class="data-label">Transform Matrix:</span>
-                <span class="data-value" id="matrix-status">None</span>
-            </div>
+        <div class="status-row">
+            <span>3D Rendering:</span>
+            <span>
+                <span id="renderStatus" class="status-indicator status-loading"></span>
+                <span id="renderStatusText">Initializing</span>
+            </span>
         </div>
-
-        <!-- Hand Tracking Details Panel -->
-        <div class="panel">
-            <h2>✋ Hand Tracking Details</h2>
-            <div class="hands-visualization" id="hands-viz">
-                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.5;">
-                    Position your hands here
-                </div>
-            </div>
-            <div id="left-hand-data">
-                <h3 style="color: #FF6B6B;">🤚 Left Hand</h3>
-                <div class="data-row">
-                    <span class="data-label">Position X:</span>
-                    <span class="data-value" id="left-x">-</span>
-                </div>
-                <div class="data-row">
-                    <span class="data-label">Position Y:</span>
-                    <span class="data-value" id="left-y">-</span>
-                </div>
-                <div class="data-row">
-                    <span class="data-label">Confidence:</span>
-                    <span class="data-value" id="left-confidence">-</span>
-                </div>
-            </div>
-            <div id="right-hand-data" style="margin-top: 20px;">
-                <h3 style="color: #4ECDC4;">🤚 Right Hand</h3>
-                <div class="data-row">
-                    <span class="data-label">Position X:</span>
-                    <span class="data-value" id="right-x">-</span>
-                </div>
-                <div class="data-row">
-                    <span class="data-label">Position Y:</span>
-                    <span class="data-value" id="right-y">-</span>
-                </div>
-                <div class="data-row">
-                    <span class="data-label">Confidence:</span>
-                    <span class="data-value" id="right-confidence">-</span>
-                </div>
-            </div>
+        <div class="status-row">
+            <span>Hand Tracking:</span>
+            <span id="handTrackingStatus">0 hands</span>
         </div>
-
-        <!-- Debug Log -->
-        <div class="panel">
-            <h2>📝 System Log</h2>
-            <div id="debug-log" class="log-container"></div>
+        <div class="status-row">
+            <span>Steering:</span>
+            <span id="steeringDisplay">0° (0%)</span>
+        </div>
+        <div class="status-row">
+            <span>Data Rate:</span>
+            <span id="dataRateDisplay">0 fps</span>
         </div>
     </div>
 
-    <!-- OpenCV.js -->
-    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady();" onerror="onOpenCvError();"></script>
-    
+    <div class="controls-panel">
+        <div style="text-align: center;">
+            <div id="steeringWheel" class="steering-wheel"></div>
+            <div style="color: #4ecdc4; font-weight: bold;" id="steeringValue">0°</div>
+        </div>
+    </div>
+
+    <div class="debug-panel">
+        <strong>🐛 Debug Log:</strong>
+        <div id="debugLog" class="debug-log"></div>
+    </div>
+
+    <canvas id="videoCanvas"></canvas>
+    <canvas id="arCanvas"></canvas>
+
     <script>
-        class GhostWheelARInterface {
+        class GhostWheelDebug {
             constructor() {
+                this.debugLog = [];
                 this.websocket = null;
-                this.messageCount = 0;
                 this.isConnected = false;
-                this.reconnectInterval = null;
-                this.opencvReady = false;
-                this.opencvLoading = true;
                 
-                // AR detection components
-                this.aruco = null;
-                this.dictionary = null;
-                this.canvas = null;
-                this.ctx = null;
-                this.currentTransformMatrix = null;
+                // Video stream handling
+                this.videoCanvas = null;
+                this.videoContext = null;
+                this.currentVideoFrame = null;
+                this.lastFrameTime = 0;
+                this.frameCount = 0;
+                
+                // Three.js components
+                this.renderer = null;
+                this.scene = null;
+                this.camera = null;
+                this.car = null;
+                
+                // Hand tracking data
+                this.currentSteering = 0;
+                this.handConfidence = 0;
+                this.handsDetected = 0;
                 
                 this.init();
             }
-
-            init() {
-                this.canvas = document.getElementById('ar-canvas');
-                this.ctx = this.canvas.getContext('2d');
-                this.log('Initializing Ghost Wheel AR Interface...', 'success');
+            
+            log(message, type = 'info') {
+                const timestamp = new Date().toLocaleTimeString();
+                const logEntry = `[${timestamp}] ${message}`;
                 
-                // Check if OpenCV callbacks were already triggered
-                if (window.opencvReadyFlag) {
-                    this.log('OpenCV.js was already loaded before init', 'success');
-                    this.onOpenCvReady();
-                } else if (window.opencvErrorFlag) {
-                    this.log('OpenCV.js had loading error before init', 'error');
-                    this.onOpenCvError();
-                } else if (typeof cv !== 'undefined') {
-                    this.log('OpenCV.js detected as already loaded', 'success');
-                    this.onOpenCvReady();
-                } else {
-                    this.log('Waiting for OpenCV.js to load from CDN...', 'warning');
-                    this.updateOpenCvStatus('loading');
+                console.log(`${type.toUpperCase()}: ${message}`);
+                
+                this.debugLog.push({ message: logEntry, type });
+                if (this.debugLog.length > 50) {
+                    this.debugLog.shift();
                 }
                 
-                this.setupWebSocket();
+                this.updateDebugDisplay();
             }
-
-            onOpenCvReady() {
-                this.opencvLoading = false;
+            
+            updateDebugDisplay() {
+                const logElement = document.getElementById('debugLog');
+                if (logElement) {
+                    logElement.innerHTML = this.debugLog
+                        .map(entry => `<div class="${entry.type}">${entry.message}</div>`)
+                        .join('');
+                    logElement.scrollTop = logElement.scrollHeight;
+                }
+            }
+            
+            updateLoadingStatus(message) {
+                const element = document.getElementById('loadingStatus');
+                if (element) element.textContent = message;
+                this.log(message, 'info');
+            }
+            
+            async init() {
+                try {
+                    this.log('🚀 Starting Ghost Wheel Debug Mode', 'success');
+                    
+                    this.updateLoadingStatus('Checking JavaScript environment...');
+                    this.checkEnvironment();
+                    
+                    this.updateLoadingStatus('Setting up Three.js...');
+                    await this.setupThreeJS();
+                    
+                    this.updateLoadingStatus('Setting up video display...');
+                    this.setupVideoDisplay();
+                    
+                    this.updateLoadingStatus('Connecting to backend...');
+                    await this.connectToBackend();
+                    
+                    this.updateLoadingStatus('Creating 3D car model...');
+                    this.createCar();
+                    
+                    this.updateLoadingStatus('Starting render loop...');
+                    this.startRenderLoop();
+                    
+                    this.hideLoadingScreen();
+                    this.log('✅ Debug system initialized successfully', 'success');
+                    
+                } catch (error) {
+                    this.log(`❌ Initialization error: ${error.message}`, 'error');
+                    this.updateLoadingStatus(`Error: ${error.message}`);
+                }
+            }
+            
+            checkEnvironment() {
+                this.log('🔍 Checking JavaScript environment...', 'info');
                 
-                // Add delay to ensure OpenCV is fully initialized
-                setTimeout(() => {
+                // Check Three.js
+                if (typeof THREE !== 'undefined') {
+                    this.log(`✅ Three.js loaded: ${THREE.REVISION}`, 'success');
+                } else {
+                    throw new Error('Three.js not loaded');
+                }
+                
+                // Check WebSocket support
+                if (typeof WebSocket !== 'undefined') {
+                    this.log('✅ WebSocket support available', 'success');
+                } else {
+                    throw new Error('WebSocket not supported');
+                }
+                
+                // Check Canvas support
+                const canvas = document.createElement('canvas');
+                if (canvas.getContext && canvas.getContext('2d')) {
+                    this.log('✅ Canvas 2D support available', 'success');
+                } else {
+                    throw new Error('Canvas not supported');
+                }
+                
+                // Check WebGL support
+                if (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')) {
+                    this.log('✅ WebGL support available', 'success');
+                } else {
+                    this.log('⚠️ WebGL not available - 3D rendering may fail', 'warning');
+                }
+                
+                this.log('✅ Environment check complete', 'success');
+            }
+            
+            setupVideoDisplay() {
+                this.videoCanvas = document.getElementById('videoCanvas');
+                this.videoContext = this.videoCanvas.getContext('2d');
+                
+                this.videoCanvas.width = 640;
+                this.videoCanvas.height = 480;
+                
+                this.log('✅ Video display setup complete', 'success');
+            }
+            
+            async setupThreeJS() {
+                return new Promise((resolve, reject) => {
                     try {
-                        // Test if cv object is properly loaded
-                        if (typeof cv === 'undefined') {
-                            throw new Error('cv object not available');
-                        }
+                        const arCanvas = document.getElementById('arCanvas');
                         
-                        // Test if ArUco module is available
-                        if (!cv.aruco || !cv.aruco.DICT_6X6_250) {
-                            throw new Error('ArUco module not available');
-                        }
+                        // Renderer
+                        this.renderer = new THREE.WebGLRenderer({ 
+                            canvas: arCanvas,
+                            alpha: true,
+                            antialias: true
+                        });
+                        this.renderer.setSize(window.innerWidth, window.innerHeight);
+                        this.renderer.shadowMap.enabled = true;
                         
-                        // Initialize ArUco detector
-                        this.dictionary = new cv.aruco_Dictionary(cv.aruco.DICT_6X6_250);
+                        // Scene
+                        this.scene = new THREE.Scene();
                         
-                        this.opencvReady = true;
-                        this.updateOpenCvStatus('ready');
-                        this.log('OpenCV.js and ArUco initialized successfully', 'success');
+                        // Camera - using PerspectiveCamera since no JSARToolKit
+                        this.camera = new THREE.PerspectiveCamera(
+                            60,
+                            window.innerWidth / window.innerHeight,
+                            0.1,
+                            1000
+                        );
+                        this.camera.position.set(0, 2, 5);
+                        this.camera.lookAt(0, 0, 0);
+                        this.scene.add(this.camera);
+                        
+                        // Lighting
+                        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                        this.scene.add(ambientLight);
+                        
+                        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                        directionalLight.position.set(5, 10, 5);
+                        directionalLight.castShadow = true;
+                        this.scene.add(directionalLight);
+                        
+                        // Handle window resize
+                        window.addEventListener('resize', () => {
+                            this.camera.aspect = window.innerWidth / window.innerHeight;
+                            this.camera.updateProjectionMatrix();
+                            this.renderer.setSize(window.innerWidth, window.innerHeight);
+                        });
+                        
+                        this.updateRenderStatus('Ready', true);
+                        this.log('✅ Three.js setup complete', 'success');
+                        resolve();
                         
                     } catch (error) {
-                        this.log(`Error initializing OpenCV/ArUco: ${error.message}`, 'error');
-                        this.updateOpenCvStatus('error');
-                        this.opencvReady = false;
-                        
-                        // Retry initialization after delay
-                        this.log('Retrying OpenCV initialization in 2 seconds...', 'warning');
-                        setTimeout(() => this.onOpenCvReady(), 2000);
+                        this.log(`❌ Three.js setup failed: ${error.message}`, 'error');
+                        reject(error);
                     }
-                }, 1000); // 1 second delay for full initialization
+                });
             }
-
-            onOpenCvError() {
-                this.opencvLoading = false;
-                this.opencvReady = false;
-                this.updateOpenCvStatus('error');
-                this.log('Failed to load OpenCV.js from CDN', 'error');
-                this.log('Check internet connection and try refreshing the page', 'error');
-            }
-
-            updateOpenCvStatus(status) {
-                const statusIndicator = document.getElementById('opencv-status');
-                const statusText = document.getElementById('opencv-text');
-
-                switch(status) {
-                    case 'loading':
-                        statusIndicator.className = 'status-indicator status-processing';
-                        statusText.textContent = 'Loading...';
-                        break;
-                    case 'ready':
-                        statusIndicator.className = 'status-indicator status-connected';
-                        statusText.textContent = 'Ready';
-                        break;
-                    case 'error':
-                        statusIndicator.className = 'status-indicator status-disconnected';
-                        statusText.textContent = 'Error';
-                        break;
-                    default:
-                        statusIndicator.className = 'status-indicator status-disconnected';
-                        statusText.textContent = 'Unknown';
-                }
-            }
-
-            setupWebSocket() {
-                try {
-                    this.websocket = new WebSocket('ws://localhost:8765');
-                    
-                    this.websocket.onopen = () => {
-                        this.isConnected = true;
-                        this.updateConnectionStatus(true);
-                        this.log('Connected to Ghost Wheel backend', 'success');
+            
+            async connectToBackend() {
+                return new Promise((resolve, reject) => {
+                    try {
+                        this.log('🔌 Attempting WebSocket connection...', 'info');
+                        this.websocket = new WebSocket('ws://localhost:8765');
                         
-                        if (this.reconnectInterval) {
-                            clearInterval(this.reconnectInterval);
-                            this.reconnectInterval = null;
-                        }
-                    };
-
-                    this.websocket.onmessage = (event) => {
-                        try {
-                            const data = JSON.parse(event.data);
-                            this.handleSystemData(data);
-                            this.messageCount++;
-                            this.updateMessageCount();
-                        } catch (error) {
-                            this.log(`Error parsing message: ${error.message}`, 'error');
-                        }
-                    };
-
-                    this.websocket.onclose = () => {
-                        this.isConnected = false;
-                        this.updateConnectionStatus(false);
-                        this.updateARStreamStatus(false);
-                        this.log('Connection lost. Attempting to reconnect...', 'error');
-                        this.scheduleReconnect();
-                    };
-
-                    this.websocket.onerror = (error) => {
-                        this.log(`WebSocket error: ${error}`, 'error');
-                    };
-
-                } catch (error) {
-                    this.log(`Failed to create WebSocket: ${error.message}`, 'error');
-                    this.scheduleReconnect();
-                }
+                        this.websocket.onopen = () => {
+                            this.isConnected = true;
+                            this.updateBackendStatus('Connected', true);
+                            this.log('✅ WebSocket connected successfully', 'success');
+                            resolve();
+                        };
+                        
+                        this.websocket.onmessage = (event) => {
+                            try {
+                                const data = JSON.parse(event.data);
+                                this.handleBackendData(data);
+                            } catch (error) {
+                                this.log(`❌ Error parsing backend data: ${error.message}`, 'error');
+                            }
+                        };
+                        
+                        this.websocket.onclose = () => {
+                            this.isConnected = false;
+                            this.updateBackendStatus('Disconnected', false);
+                            this.updateVideoStatus('No Stream', false);
+                            this.log('❌ WebSocket disconnected', 'error');
+                            
+                            // Attempt reconnection
+                            setTimeout(() => {
+                                if (!this.isConnected) {
+                                    this.log('🔄 Attempting to reconnect...', 'info');
+                                    this.connectToBackend().catch(() => {
+                                        this.log('❌ Reconnection failed', 'error');
+                                    });
+                                }
+                            }, 3000);
+                        };
+                        
+                        this.websocket.onerror = (error) => {
+                            this.log(`❌ WebSocket error: ${error}`, 'error');
+                            this.updateBackendStatus('Error', false);
+                            reject(new Error('WebSocket connection failed'));
+                        };
+                        
+                        // Connection timeout
+                        setTimeout(() => {
+                            if (!this.isConnected) {
+                                this.log('❌ Connection timeout', 'error');
+                                reject(new Error('Connection timeout'));
+                            }
+                        }, 5000);
+                        
+                    } catch (error) {
+                        this.log(`❌ WebSocket setup failed: ${error.message}`, 'error');
+                        reject(error);
+                    }
+                });
             }
-
-            scheduleReconnect() {
-                if (!this.reconnectInterval) {
-                    this.reconnectInterval = setInterval(() => {
-                        if (!this.isConnected) {
-                            this.log('Attempting to reconnect...', 'warning');
-                            this.setupWebSocket();
-                        }
-                    }, 3000);
+            
+            handleBackendData(data) {
+                // Update data rate counter
+                this.frameCount++;
+                const now = Date.now();
+                if (now - this.lastFrameTime > 1000) {
+                    const fps = this.frameCount;
+                    this.updateDataRate(fps);
+                    this.frameCount = 0;
+                    this.lastFrameTime = now;
                 }
-            }
-
-            handleSystemData(data) {
-                // Update last update time
-                document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
-
+                
                 // Handle hand tracking data
-                this.updateHandTrackingData(data);
-
-                // Handle AR stream data
-                if (data.ar_frame_available && data.ar_frame) {
-                    this.updateARStreamStatus(true);
-                    this.processARFrame(data.ar_frame);
-                } else {
-                    this.updateARStreamStatus(false);
-                    this.clearARDisplay();
+                if (data.hands_detected !== undefined) {
+                    this.currentSteering = data.steering_angle || 0;
+                    this.handConfidence = data.confidence || 0;
+                    this.handsDetected = data.hands_detected || 0;
+                    
+                    this.updateHandTrackingDisplay();
+                    this.updateSteeringDisplay();
+                    
+                    // Apply steering to car rotation
+                    if (this.car) {
+                        this.car.rotation.y = THREE.MathUtils.degToRad(this.currentSteering);
+                    }
+                }
+                
+                // Handle video frame data
+                if (data.ar_frame && data.ar_frame.frame_data) {
+                    this.handleVideoFrame(data.ar_frame);
                 }
             }
-
-            updateHandTrackingData(data) {
-                // Update hands count
-                document.getElementById('hands-count').textContent = data.hands_detected || 0;
-
-                // Update steering angle
-                const steeringAngle = data.steering_angle || 0;
-                document.getElementById('steering-angle').textContent = `${steeringAngle.toFixed(1)}°`;
-                
-                // Update steering status
-                this.updateSteeringStatus(steeringAngle);
-                
-                // Rotate steering wheel visual
-                const steeringWheel = document.getElementById('steering-wheel');
-                steeringWheel.style.transform = `rotate(${steeringAngle}deg)`;
-
-                // Update confidence
-                const confidence = data.confidence || 0;
-                const confidencePercent = Math.round(confidence * 100);
-                document.getElementById('confidence-value').textContent = `${confidencePercent}%`;
-                document.getElementById('confidence-bar').style.width = `${confidencePercent}%`;
-
-                // Update hand visualizations
-                this.updateHandVisualization(data);
-                this.updateHandData(data);
-            }
-
-            updateSteeringStatus(angle) {
-                const statusElement = document.getElementById('steering-status');
-                
-                if (Math.abs(angle) < 2) {
-                    statusElement.textContent = 'Straight';
-                    statusElement.className = 'data-value steering-straight';
-                } else if (angle < 0) {
-                    statusElement.textContent = `Left ${Math.abs(angle).toFixed(1)}°`;
-                    statusElement.className = 'data-value steering-left';
-                } else {
-                    statusElement.textContent = `Right ${angle.toFixed(1)}°`;
-                    statusElement.className = 'data-value steering-right';
-                }
-            }
-
-            updateHandVisualization(data) {
-                const viz = document.getElementById('hands-viz');
-                
-                // Clear existing hand points
-                viz.querySelectorAll('.hand-point').forEach(point => point.remove());
-
-                // Add left hand
-                if (data.left_hand) {
-                    const leftPoint = document.createElement('div');
-                    leftPoint.className = 'hand-point hand-left';
-                    leftPoint.style.left = `${data.left_hand.wrist_x * 100}%`;
-                    leftPoint.style.top = `${data.left_hand.wrist_y * 100}%`;
-                    leftPoint.title = `Left Hand (${data.left_hand.confidence.toFixed(2)})`;
-                    viz.appendChild(leftPoint);
-                }
-
-                // Add right hand
-                if (data.right_hand) {
-                    const rightPoint = document.createElement('div');
-                    rightPoint.className = 'hand-point hand-right';
-                    rightPoint.style.left = `${data.right_hand.wrist_x * 100}%`;
-                    rightPoint.style.top = `${data.right_hand.wrist_y * 100}%`;
-                    rightPoint.title = `Right Hand (${data.right_hand.confidence.toFixed(2)})`;
-                    viz.appendChild(rightPoint);
-                }
-            }
-
-            updateHandData(data) {
-                // Left hand data
-                if (data.left_hand) {
-                    document.getElementById('left-x').textContent = data.left_hand.wrist_x.toFixed(3);
-                    document.getElementById('left-y').textContent = data.left_hand.wrist_y.toFixed(3);
-                    document.getElementById('left-confidence').textContent = `${(data.left_hand.confidence * 100).toFixed(1)}%`;
-                } else {
-                    document.getElementById('left-x').textContent = '-';
-                    document.getElementById('left-y').textContent = '-';
-                    document.getElementById('left-confidence').textContent = '-';
-                }
-
-                // Right hand data
-                if (data.right_hand) {
-                    document.getElementById('right-x').textContent = data.right_hand.wrist_x.toFixed(3);
-                    document.getElementById('right-y').textContent = data.right_hand.wrist_y.toFixed(3);
-                    document.getElementById('right-confidence').textContent = `${(data.right_hand.confidence * 100).toFixed(1)}%`;
-                } else {
-                    document.getElementById('right-x').textContent = '-';
-                    document.getElementById('right-y').textContent = '-';
-                    document.getElementById('right-confidence').textContent = '-';
-                }
-            }
-
-            processARFrame(frameBase64) {
-                // Detailed OpenCV readiness check
-                if (this.opencvLoading) {
-                    this.log('OpenCV.js still loading, please wait...', 'warning');
-                    return;
-                }
-                
-                if (!this.opencvReady) {
-                    this.log('OpenCV.js failed to initialize - check browser console for errors', 'error');
-                    return;
-                }
-                
-                if (!this.dictionary) {
-                    this.log('ArUco dictionary not initialized - trying to reinitialize...', 'warning');
-                    this.onOpenCvReady(); // Try to reinitialize
-                    return;
-                }
-
+            
+            handleVideoFrame(frameData) {
                 try {
-                    // Create image from base64
                     const img = new Image();
                     img.onload = () => {
-                        try {
-                            // Draw image to canvas
-                            this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height);
-                            
-                            // Detect ArUco markers
-                            this.detectArUcoMarkers(img);
-                        } catch (error) {
-                            this.log(`Error drawing image to canvas: ${error.message}`, 'error');
-                        }
+                        // Draw to video canvas
+                        this.videoContext.drawImage(img, 0, 0, this.videoCanvas.width, this.videoCanvas.height);
+                        this.updateVideoStatus('Streaming', true);
                     };
                     
                     img.onerror = () => {
-                        this.log('Error loading AR frame image', 'error');
+                        this.log('❌ Error loading video frame', 'error');
+                        this.updateVideoStatus('Error', false);
                     };
                     
-                    img.src = `data:image/jpeg;base64,${frameBase64}`;
+                    img.src = 'data:image/jpeg;base64,' + frameData.frame_data;
                     
                 } catch (error) {
-                    this.log(`Error processing AR frame: ${error.message}`, 'error');
+                    this.log(`❌ Error handling video frame: ${error.message}`, 'error');
+                    this.updateVideoStatus('Error', false);
                 }
             }
-
-            detectArUcoMarkers(img) {
-                try {
-                    // Create OpenCV Mat from image
-                    const mat = cv.imread(img);
-                    const gray = new cv.Mat();
-                    cv.cvtColor(mat, gray, cv.COLOR_RGBA2GRAY);
-
-                    // Detect markers
-                    const corners = new cv.MatVector();
-                    const ids = new cv.Mat();
-                    const rejected = new cv.MatVector();
-
-                    cv.aruco.detectMarkers(gray, this.dictionary, corners, ids, new cv.aruco_DetectorParameters(), rejected);
-
-                    const markersFound = ids.rows;
-                    this.updateMarkerStatus(markersFound);
-
-                    if (markersFound > 0) {
-                        // Draw detected markers
-                        cv.aruco.drawDetectedMarkers(mat, corners, ids);
-                        
-                        // Calculate transformation matrix for first marker
-                        this.calculateTransformationMatrix(corners, ids);
-                        
-                        // Update display
-                        cv.imshow('ar-canvas', mat);
-                        
-                        this.log(`Detected ${markersFound} ArUco marker(s)`, 'success');
-                    } else {
-                        // No markers found, just display the image
-                        cv.imshow('ar-canvas', mat);
-                        this.currentTransformMatrix = null;
-                        document.getElementById('matrix-status').textContent = 'None';
-                        document.getElementById('surface-status').textContent = 'No';
-                    }
-
-                    // Cleanup
-                    mat.delete();
-                    gray.delete();
-                    corners.delete();
-                    ids.delete();
-                    rejected.delete();
-
-                } catch (error) {
-                    this.log(`Error in ArUco detection: ${error.message}`, 'error');
-                }
-            }
-
-            calculateTransformationMatrix(corners, ids) {
-                try {
-                    // For now, use the first detected marker
-                    if (corners.size() > 0) {
-                        const corner = corners.get(0);
-                        const markerId = ids.intPtr(0, 0)[0];
-                        
-                        // Simplified transformation calculation
-                        // In a real implementation, you would use cv.solvePnP
-                        this.currentTransformMatrix = {
-                            markerId: markerId,
-                            corners: this.extractCornerData(corner),
-                            timestamp: Date.now()
-                        };
-                        
-                        document.getElementById('matrix-status').textContent = `Marker ${markerId}`;
-                        document.getElementById('surface-status').textContent = 'Yes';
-                        
-                        this.log(`Transform matrix calculated for marker ${markerId}`, 'success');
-                    }
-                } catch (error) {
-                    this.log(`Error calculating transformation matrix: ${error.message}`, 'error');
-                }
-            }
-
-            extractCornerData(corner) {
-                // Extract corner coordinates for transformation calculation
-                const data = corner.data32F;
-                return {
-                    topLeft: [data[0], data[1]],
-                    topRight: [data[2], data[3]], 
-                    bottomRight: [data[4], data[5]],
-                    bottomLeft: [data[6], data[7]]
-                };
-            }
-
-            updateMarkerStatus(count) {
-                const statusElement = document.getElementById('marker-status');
-                const countElement = document.getElementById('markers-count');
-                
-                countElement.textContent = count;
-                
-                if (count > 0) {
-                    statusElement.textContent = 'Detected';
-                    statusElement.className = 'data-value ar-detected';
-                } else {
-                    statusElement.textContent = 'Not Detected';
-                    statusElement.className = 'data-value ar-not-detected';
-                }
-            }
-
-            clearARDisplay() {
-                this.ctx.fillStyle = '#333';
-                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-                this.ctx.fillStyle = '#666';
-                this.ctx.font = '16px Arial';
-                this.ctx.textAlign = 'center';
-                this.ctx.fillText('Waiting for AR stream...', this.canvas.width/2, this.canvas.height/2);
-            }
-
-            updateConnectionStatus(connected) {
-                const statusIndicator = document.getElementById('connection-status');
-                const statusText = document.getElementById('connection-text');
-
-                if (connected) {
-                    statusIndicator.className = 'status-indicator status-connected';
-                    statusText.textContent = 'Connected';
-                } else {
-                    statusIndicator.className = 'status-indicator status-disconnected';
-                    statusText.textContent = 'Disconnected';
-                }
-            }
-
-            updateARStreamStatus(active) {
-                const statusIndicator = document.getElementById('ar-stream-status');
-                const statusText = document.getElementById('ar-stream-text');
-
-                if (active) {
-                    statusIndicator.className = 'status-indicator status-connected';
-                    statusText.textContent = 'Active';
-                } else {
-                    statusIndicator.className = 'status-indicator status-disconnected';
-                    statusText.textContent = 'Inactive';
-                }
-            }
-
-            updateMessageCount() {
-                document.getElementById('message-count').textContent = this.messageCount;
-            }
-
-            log(message, type = 'info') {
-                const logContainer = document.getElementById('debug-log');
-                const logEntry = document.createElement('div');
-                logEntry.className = `log-entry ${type}`;
-                
-                const timestamp = new Date().toLocaleTimeString();
-                logEntry.textContent = `[${timestamp}] ${message}`;
-                
-                logContainer.appendChild(logEntry);
-                logContainer.scrollTop = logContainer.scrollHeight;
-
-                // Keep only last 50 log entries
-                const entries = logContainer.querySelectorAll('.log-entry');
-                if (entries.length > 50) {
-                    entries[0].remove();
-                }
-            }
-        }
-
-        // Global OpenCV ready callback
-        function onOpenCvReady() {
-            console.log('OpenCV.js loaded - global callback triggered');
-            if (window.ghostWheelAR) {
-                window.ghostWheelAR.onOpenCvReady();
-            } else {
-                console.log('GhostWheelAR not yet initialized, storing callback');
-                // Store the fact that OpenCV is ready for later
-                window.opencvReadyFlag = true;
-            }
-        }
-
-        function onOpenCvError() {
-            console.error('OpenCV.js failed to load - global error callback');
-            if (window.ghostWheelAR) {
-                window.ghostWheelAR.onOpenCvError();
-            } else {
-                // Store the error state
-                window.opencvErrorFlag = true;
-            }
-        }
-
-        // Initialize the interface when page loads
-        document.addEventListener('DOMContentLoaded', () => {
-            console.log('DOM loaded, initializing GhostWheelAR...');
-            window.ghostWheelAR = new GhostWheelARInterface();
             
-            // Check if OpenCV callbacks were already triggered
-            if (window.opencvReadyFlag) {
-                console.log('OpenCV was ready before GhostWheelAR init, triggering callback');
-                window.ghostWheelAR.onOpenCvReady();
-            } else if (window.opencvErrorFlag) {
-                console.log('OpenCV had error before GhostWheelAR init, triggering error callback');
-                window.ghostWheelAR.onOpenCvError();
+            createCar() {
+                // Create simple car model
+                const carGroup = new THREE.Group();
+                
+                // Body
+                const bodyGeometry = new THREE.BoxGeometry(2, 0.8, 4);
+                const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0xff4444 });
+                const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+                body.position.y = 0.4;
+                body.castShadow = true;
+                carGroup.add(body);
+                
+                // Windshield
+                const windshieldGeometry = new THREE.BoxGeometry(1.8, 0.6, 1.5);
+                const windshieldMaterial = new THREE.MeshLambertMaterial({ 
+                    color: 0x87ceeb, 
+                    transparent: true, 
+                    opacity: 0.7 
+                });
+                const windshield = new THREE.Mesh(windshieldGeometry, windshieldMaterial);
+                windshield.position.set(0, 1.1, 0.5);
+                carGroup.add(windshield);
+                
+                // Wheels
+                const wheelGeometry = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 8);
+                const wheelMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+                
+                const wheelPositions = [
+                    [-0.8, 0, 1.2],   // Front left
+                    [0.8, 0, 1.2],    // Front right
+                    [-0.8, 0, -1.2],  // Rear left
+                    [0.8, 0, -1.2]    // Rear right
+                ];
+                
+                wheelPositions.forEach(pos => {
+                    const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                    wheel.position.set(pos[0], pos[1], pos[2]);
+                    wheel.rotation.z = Math.PI / 2;
+                    wheel.castShadow = true;
+                    carGroup.add(wheel);
+                });
+                
+                // Position the car
+                carGroup.position.set(0, 0, 0);
+                carGroup.scale.set(0.3, 0.3, 0.3);
+                
+                this.car = carGroup;
+                this.scene.add(this.car);
+                
+                this.log('✅ Car model created and added to scene', 'success');
+            }
+            
+            startRenderLoop() {
+                const animate = () => {
+                    requestAnimationFrame(animate);
+                    
+                    // Simple car animation when no hands detected
+                    if (this.car && this.handsDetected === 0) {
+                        this.car.rotation.y += 0.01;
+                    }
+                    
+                    this.renderer.render(this.scene, this.camera);
+                };
+                
+                animate();
+                this.log('✅ Render loop started', 'success');
+            }
+            
+            // UI Update Methods
+            updateBackendStatus(status, connected) {
+                const indicator = document.getElementById('backendStatus');
+                const text = document.getElementById('backendStatusText');
+                if (indicator && text) {
+                    indicator.className = `status-indicator ${connected ? 'status-connected' : 'status-disconnected'}`;
+                    text.textContent = status;
+                }
+            }
+            
+            updateVideoStatus(status, active) {
+                const indicator = document.getElementById('videoStatus');
+                const text = document.getElementById('videoStatusText');
+                if (indicator && text) {
+                    indicator.className = `status-indicator ${active ? 'status-connected' : 'status-disconnected'}`;
+                    text.textContent = status;
+                }
+            }
+            
+            updateRenderStatus(status, ready) {
+                const indicator = document.getElementById('renderStatus');
+                const text = document.getElementById('renderStatusText');
+                if (indicator && text) {
+                    indicator.className = `status-indicator ${ready ? 'status-connected' : 'status-loading'}`;
+                    text.textContent = status;
+                }
+            }
+            
+            updateHandTrackingDisplay() {
+                const element = document.getElementById('handTrackingStatus');
+                if (element) {
+                    element.textContent = `${this.handsDetected} hands`;
+                }
+            }
+            
+            updateSteeringDisplay() {
+                const wheel = document.getElementById('steeringWheel');
+                const value = document.getElementById('steeringValue');
+                const display = document.getElementById('steeringDisplay');
+                
+                if (wheel) wheel.style.transform = `rotate(${this.currentSteering}deg)`;
+                if (value) value.textContent = `${this.currentSteering.toFixed(1)}°`;
+                if (display) {
+                    const confidencePercent = Math.round(this.handConfidence * 100);
+                    display.textContent = `${this.currentSteering.toFixed(1)}° (${confidencePercent}%)`;
+                }
+            }
+            
+            updateDataRate(fps) {
+                const element = document.getElementById('dataRateDisplay');
+                if (element) element.textContent = `${fps} fps`;
+            }
+            
+            hideLoadingScreen() {
+                const loadingScreen = document.getElementById('loadingScreen');
+                if (loadingScreen) {
+                    loadingScreen.style.opacity = '0';
+                    setTimeout(() => {
+                        loadingScreen.style.display = 'none';
+                    }, 500);
+                }
+            }
+        }
+        
+        // Initialize when page loads
+        window.addEventListener('load', () => {
+            console.log('🐛 Starting Ghost Wheel Debug Mode');
+            
+            // Global error handlers
+            window.addEventListener('error', (event) => {
+                console.error('🚨 Global JavaScript Error:', event.error);
+            });
+            
+            window.addEventListener('unhandledrejection', (event) => {
+                console.error('🚨 Unhandled Promise Rejection:', event.reason);
+            });
+            
+            try {
+                new GhostWheelDebug();
+            } catch (error) {
+                console.error('🚨 Failed to start debug system:', error);
             }
         });
     </script>
