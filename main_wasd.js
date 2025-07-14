@@ -17,8 +17,8 @@ let carSystem = {
     speed: 0,
     
     // Control parameters
-    acceleration: 0.008,
-    maxSpeed: 0.15,
+    acceleration: 0.012,
+    maxSpeed: 0.40,
     turnSpeed: 0.05,
     friction: 0.95,
     brakeForce: 0.85,
@@ -390,7 +390,7 @@ function loadCarModel() {
             carModel = gltf.scene;
             
             // Setup car properties - DOUBLE SIZE (was 0.3, now 0.6)
-            carModel.scale.set(0.6, 0.6, 0.6);
+            carModel.scale.set(1.7, 1.7, 1.7);
             carModel.position.set(0, 0.1, 0); // Slightly higher due to larger size
             
             // Enable shadows
