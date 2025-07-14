@@ -1,0 +1,205 @@
+<!doctype html>
+<html> 
+<head>
+	<meta charset="UTF-8">
+	<title>Ghost Wheel - WASD Controls</title>
+	<script type="importmap">
+		{
+			"imports": {
+			"three": "https://unpkg.com/three/build/three.module.js",
+			"three/addons/": "https://unpkg.com/three/examples/jsm/"
+		  }
+		}
+	</script>
+	<script src="artoolkit.min.js"></script>
+	<script type="module" src="main_wasd.js"></script>
+	<style>
+		body {
+			margin: 0;
+			font-family: Arial, sans-serif;
+			overflow: hidden;
+			background: #000;
+		}
+		#camera-controls {
+			position: fixed;
+			top: 10px;
+			left: 10px;
+			z-index: 1000;
+			background: rgba(0, 0, 0, 0.8);
+			padding: 10px;
+			border-radius: 5px;
+			color: white;
+			font-size: 14px;
+			backdrop-filter: blur(5px);
+			transition: opacity 0.3s ease;
+		}
+		#camera-controls.hidden {
+			opacity: 0.3;
+		}
+		#camera-controls:hover {
+			opacity: 1 !important;
+		}
+		#camera-select {
+			margin-left: 10px;
+			padding: 5px;
+			border: none;
+			border-radius: 3px;
+			background: white;
+			min-width: 150px;
+		}
+		#camera-select:disabled {
+			opacity: 0.6;
+			cursor: not-allowed;
+		}
+		#refresh-cameras {
+			margin-left: 10px;
+			padding: 5px 10px;
+			background: #007cba;
+			color: white;
+			border: none;
+			border-radius: 3px;
+			cursor: pointer;
+			transition: background-color 0.2s ease;
+		}
+		#refresh-cameras:hover:not(:disabled) {
+			background: #005a87;
+		}
+		#refresh-cameras:disabled {
+			background: #666;
+			cursor: not-allowed;
+		}
+		#controls-info {
+			position: fixed;
+			top: 80px;
+			left: 10px;
+			z-index: 1000;
+			background: rgba(0, 0, 0, 0.8);
+			padding: 15px;
+			border-radius: 8px;
+			color: white;
+			font-size: 14px;
+			backdrop-filter: blur(5px);
+			transition: opacity 0.3s ease;
+		}
+		#controls-info.hidden {
+			opacity: 0.3;
+		}
+		#controls-info:hover {
+			opacity: 1 !important;
+		}
+		.controls-title {
+			font-weight: bold;
+			margin-bottom: 10px;
+			color: #4CAF50;
+		}
+		.control-item {
+			margin: 5px 0;
+			display: flex;
+			justify-content: space-between;
+			min-width: 200px;
+		}
+		.key {
+			background: #333;
+			padding: 2px 6px;
+			border-radius: 3px;
+			font-family: monospace;
+		}
+		#status-info {
+			position: fixed;
+			top: 10px;
+			right: 10px;
+			z-index: 1000;
+			background: rgba(0, 0, 0, 0.8);
+			padding: 15px;
+			border-radius: 8px;
+			color: white;
+			font-size: 12px;
+			backdrop-filter: blur(5px);
+		}
+		.status-item {
+			margin: 3px 0;
+		}
+		.status-good { color: #4CAF50; }
+		.status-warning { color: #FF9800; }
+		.status-error { color: #f44336; }
+		#myvideo, #mycanvas {
+			display: block;
+			max-width: 100vw;
+			max-height: 100vh;
+		}
+		/* Hide controls after 10 seconds */
+		#camera-controls.auto-hide, #controls-info.auto-hide {
+			opacity: 0.3;
+		}
+	</style>
+</head> 
+<body>
+	<div id="camera-controls">
+		<label for="camera-select">Camera:</label>
+		<select id="camera-select">
+			<option value="">Loading cameras...</option>
+		</select>
+		<button id="refresh-cameras">Refresh</button>
+	</div>
+
+	<div id="controls-info">
+		<div class="controls-title">🎮 Ghost Wheel Controls</div>
+		<div class="control-item">
+			<span><span class="key">W</span> Forward</span>
+		</div>
+		<div class="control-item">
+			<span><span class="key">S</span> Backward</span>
+		</div>
+		<div class="control-item">
+			<span><span class="key">A</span> Turn Left</span>
+		</div>
+		<div class="control-item">
+			<span><span class="key">D</span> Turn Right</span>
+		</div>
+		<div class="control-item">
+			<span><span class="key">Space</span> Brake</span>
+		</div>
+		<div class="control-item">
+			<span><span class="key">R</span> Reset & Find New Marker</span>
+		</div>
+		<div class="control-item">
+			<span><span class="key">G</span> Toggle Grid</span>
+		</div>
+	</div>
+
+	<div id="status-info">
+		<div class="status-item">Marker: <span id="marker-status" class="status-error">Not Detected</span></div>
+		<div class="status-item">Car Speed: <span id="speed-value">0.0</span></div>
+		<div class="status-item">Position: <span id="position-value">0, 0</span></div>
+		<div class="status-item">Grid: <span id="grid-status">Visible</span></div>
+	</div>
+
+	<video autoplay muted id="myvideo"></video>
+	<canvas id="mycanvas"></canvas>
+	
+	<script>
+		// Auto-hide controls after inactivity
+		let hideTimeout;
+		const controls = document.getElementById('controls-info');
+		const cameraControls = document.getElementById('camera-controls');
+		
+		function resetHideTimer() {
+			clearTimeout(hideTimeout);
+			controls.classList.remove('auto-hide');
+			cameraControls.classList.remove('hidden');
+			hideTimeout = setTimeout(() => {
+				controls.classList.add('auto-hide');
+				cameraControls.classList.add('hidden');
+			}, 10000);
+		}
+		
+		// Reset timer on user interaction
+		['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'].forEach(event => {
+			document.addEventListener(event, resetHideTimer, { passive: true });
+		});
+		
+		// Initial timer
+		resetHideTimer();
+	</script>
+</body>
+</html>
