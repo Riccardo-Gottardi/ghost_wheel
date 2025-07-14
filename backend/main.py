@@ -2,13 +2,6 @@ import cv2
 import asyncio
 import json
 import time
-import base64
-import numpy as np
-import warnings
-
-# Suppress protobuf deprecation warnings from MediaPipe
-warnings.filterwarnings("ignore", category=UserWarning, module="google.protobuf.symbol_database")
-
 from camera_manager import CameraManager
 from hand_tracker import HandTracker
 from websocket_server import WebSocketServer
@@ -18,20 +11,12 @@ class GhostWheelSystem:
         self.camera_manager = CameraManager()
         self.hand_tracker = None
         self.websocket_server = WebSocketServer()
-        
-        # Camera configuration
         self.hand_camera_id = None
-        self.ar_camera_id = None
-        self.ar_camera = None
-        
-        # System state
         self.running = False
-        self.video_frame_skip = 2  # Send every nth frame to reduce bandwidth
-        self.frame_counter = 0
         
-    def setup_cameras(self):
-        """Setup camera selection interface for both hand tracking and AR surface"""
-        print("=== Ghost Wheel - Dual Camera Setup ===")
+    def setup_camera(self):
+        """Setup camera selection interface - simplified for hand tracking only"""
+        print("=== Ghost Wheel - Hand Detection Setup ===")
         
         # Discover available cameras
         available_cameras = self.camera_manager.discover_cameras()
@@ -40,281 +25,178 @@ class GhostWheelSystem:
             print("ERROR: No cameras found!")
             return False
             
-        if len(available_cameras) < 2:
-            print("ERROR: This system requires 2 cameras!")
-            print("Found only:", len(available_cameras))
-            print("You can use the same camera for both (not recommended)")
-            
         print(f"\nFound {len(available_cameras)} camera(s):")
         for i, camera_info in enumerate(available_cameras):
             print(f"  {i}: {camera_info}")
             
-        # Select hand tracking camera
-        print("\n📱 HAND TRACKING CAMERA:")
-        print("   - Should have good view of your hands")
-        print("   - Usually the laptop built-in camera")
-        
-        while True:
-            try:
-                choice = input(f"Select camera for HAND TRACKING (0-{len(available_cameras)-1}): ")
-                self.hand_camera_id = int(choice)
-                if 0 <= self.hand_camera_id < len(available_cameras):
-                    break
-                print("Invalid selection!")
-            except ValueError:
-                print("Please enter a number!")
+        # Auto-select if only one camera available
+        if len(available_cameras) == 1:
+            self.hand_camera_id = 0
+            print(f"\nAuto-selected camera 0 for hand tracking")
+        else:
+            # Select hand tracking camera
+            while True:
+                try:
+                    choice = input(f"\nSelect camera for HAND TRACKING (0-{len(available_cameras)-1}): ")
+                    self.hand_camera_id = int(choice)
+                    if 0 <= self.hand_camera_id < len(available_cameras):
+                        break
+                    print("Invalid selection!")
+                except ValueError:
+                    print("Please enter a number!")
                 
-        # Select AR surface camera
-        print("\n🎯 AR SURFACE CAMERA:")
-        print("   - Should point at the AR marker surface")
-        print("   - Usually an external USB camera or smartphone")
-        print("   - Can be the same as hand tracking (but not optimal)")
-        
-        while True:
-            try:
-                choice = input(f"Select camera for AR SURFACE (0-{len(available_cameras)-1}): ")
-                self.ar_camera_id = int(choice)
-                if 0 <= self.ar_camera_id < len(available_cameras):
-                    break
-                print("Invalid selection!")
-            except ValueError:
-                print("Please enter a number!")
-                
-        print(f"\n✅ Configuration:")
-        print(f"   Hand Tracking: Camera {self.hand_camera_id}")
-        print(f"   AR Surface: Camera {self.ar_camera_id}")
-        
-        if self.hand_camera_id == self.ar_camera_id:
-            print("⚠️  WARNING: Using same camera for both functions")
-            print("   This may affect performance and usability")
+        print(f"\nConfiguration:")
+        print(f"  Hand Tracking Camera: {self.hand_camera_id}")
         
         return True
-        
     def initialize_hand_tracker(self):
         """Initialize MediaPipe hand tracker"""
         if self.hand_camera_id is None:
             print("ERROR: No camera selected for hand tracking!")
             return False
             
-        print("🤲 Initializing hand tracker...")
-        self.hand_tracker = HandTracker(camera_id=self.hand_camera_id)
-        return self.hand_tracker.initialize()
-        
-    def initialize_ar_camera(self):
-        """Initialize AR surface camera"""
-        if self.ar_camera_id is None:
-            print("ERROR: No camera selected for AR surface!")
+        try:
+            print("Initializing hand tracker...")
+            self.hand_tracker = HandTracker(camera_id=self.hand_camera_id)
+            
+            if not self.hand_tracker.initialize():
+                print("ERROR: Failed to initialize hand tracker!")
+                self.hand_tracker = None
+                return False
+                
+            print("Hand tracker initialized successfully")
+            return True
+            
+        except Exception as e:
+            print(f"Error initializing hand tracker: {e}")
+            self.hand_tracker = None
             return False
             
-        print("🎯 Initializing AR surface camera...")
-        self.ar_camera = cv2.VideoCapture(self.ar_camera_id)
-        
-        if not self.ar_camera.isOpened():
-            print(f"ERROR: Cannot open AR camera {self.ar_camera_id}")
-            return False
-            
-        # Set camera properties for optimal AR performance
-        self.ar_camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.ar_camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        self.ar_camera.set(cv2.CAP_PROP_FPS, 30)
-        
-        # Test frame capture
-        ret, test_frame = self.ar_camera.read()
-        if not ret:
-            print("ERROR: Cannot read from AR camera")
-            return False
-            
-        print(f"✅ AR camera initialized: {test_frame.shape}")
-        return True
-        
-    def capture_ar_frame(self):
-        """Capture and encode AR frame for transmission"""
-        if not self.ar_camera or not self.ar_camera.isOpened():
-            return None
-            
-        ret, frame = self.ar_camera.read()
-        if not ret:
-            return None
-            
-        # Resize frame if needed (reduce bandwidth)
-        height, width = frame.shape[:2]
-        if width > 640:
-            scale = 640 / width
-            new_width = int(width * scale)
-            new_height = int(height * scale)
-            frame = cv2.resize(frame, (new_width, new_height))
-            
-        # Encode frame as JPEG for transmission
-        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 80]  # Adjust quality vs bandwidth
-        success, encoded_img = cv2.imencode('.jpg', frame, encode_param)
-        
-        if success:
-            # Convert the encoded image (numpy array) to bytes for base64 encoding
-            # encoded_img is a 1D numpy array containing JPEG file data
-            jpeg_bytes = encoded_img.tobytes()
-            img_base64 = base64.b64encode(jpeg_bytes).decode('utf-8')
-            
-            return {
-                'frame_data': img_base64,
-                'width': frame.shape[1],
-                'height': frame.shape[0],
-                'timestamp': time.time() * 1000,
-                'format': 'jpeg'
-            }
-        
-        return None
-        
     async def main_loop(self):
-        """Main processing loop - handles both cameras and data fusion"""
-        print("🚀 Starting dual camera processing...")
-        print("📱 Hand tracking camera active")
-        print("🎯 AR surface camera streaming") 
-        print("🔄 Data fusion and WebSocket broadcasting")
-        print("\n" + "="*50)
+        """High-performance main loop with optimized logging"""
+        print("\n=== Starting High-Performance Hand Detection ===")
+        print("Move your hands in front of the camera to control the steering")
+        print("Press Ctrl+C to stop")
+        
+        if not self.hand_tracker:
+            print("ERROR: Hand tracker not initialized!")
+            return
         
         self.running = True
-        frame_count = 0
-        last_fps_time = time.time()
-        last_client_count = 0
         
-        while self.running:
-            try:
-                # Get hand tracking data
-                hand_data = None
-                if self.hand_tracker:
-                    hand_data = self.hand_tracker.process_frame()
-                    
-                # Get AR frame (skip frames to reduce bandwidth)
-                ar_frame_data = None
-                self.frame_counter += 1
-                if self.frame_counter % self.video_frame_skip == 0:
-                    ar_frame_data = self.capture_ar_frame()
+        # Performance monitoring
+        frame_count = 0
+        start_time = time.time()
+        last_print_time = start_time
+        print_interval = 1.0  # Print stats every 1 second
+        
+        # Performance timing
+        total_process_time = 0
+        total_broadcast_time = 0
+        
+        try:
+            while self.running:
+                loop_start = time.time()
                 
-                # Prepare combined data packet
-                combined_data = {
-                    'timestamp': time.time() * 1000,
-                    'type': 'ghost_wheel_data'
-                }
+                # Process hand tracking frame
+                process_start = time.time()
+                hand_data = self.hand_tracker.process_frame()
+                process_time = time.time() - process_start
+                total_process_time += process_time
                 
-                # Add hand tracking data
                 if hand_data:
-                    combined_data.update({
-                        'hands_detected': hand_data.get('hands_detected', 0),
-                        'steering_angle': hand_data.get('steering_angle', 0),
-                        'confidence': hand_data.get('confidence', 0),
-                        'left_hand': hand_data.get('left_hand'),
-                        'right_hand': hand_data.get('right_hand')
-                    })
+                    # Send data to connected clients
+                    broadcast_start = time.time()
+                    await self.websocket_server.broadcast(hand_data)
+                    broadcast_time = time.time() - broadcast_start
+                    total_broadcast_time += broadcast_time
+                    
+                    frame_count += 1
+                    current_time = time.time()
+                    
+                    # Print performance stats (limited frequency)
+                    if current_time - last_print_time >= print_interval:
+                        elapsed = current_time - start_time
+                        fps = frame_count / elapsed if elapsed > 0 else 0
+                        avg_process = (total_process_time / frame_count * 1000) if frame_count > 0 else 0
+                        avg_broadcast = (total_broadcast_time / frame_count * 1000) if frame_count > 0 else 0
+                        
+                        hands = hand_data.get('hands_detected', 0)
+                        angle = hand_data.get('steering_angle', 0)
+                        confidence = hand_data.get('confidence', 0)
+                        
+                        print(f"FPS: {fps:5.1f} | Hands: {hands} | Steering: {angle:6.1f}° | "
+                              f"Process: {avg_process:4.1f}ms | Broadcast: {avg_broadcast:4.1f}ms")
+                        
+                        last_print_time = current_time
                 else:
-                    combined_data.update({
+                    # Send empty data if frame processing fails
+                    empty_data = {
+                        'timestamp': int(time.time() * 1000),
                         'hands_detected': 0,
                         'steering_angle': 0,
                         'confidence': 0,
                         'left_hand': None,
-                        'right_hand': None
-                    })
+                        'right_hand': None,
+                        'status': 'no_frame'
+                    }
+                    await self.websocket_server.broadcast(empty_data)
                 
-                # Add AR frame data
-                if ar_frame_data:
-                    combined_data['ar_frame'] = ar_frame_data
+                # Minimal delay for maximum performance
+                # Remove or reduce this if you want maximum speed
+                await asyncio.sleep(0.001)  # 1ms delay
                 
-                # Broadcast to all connected clients
-                await self.websocket_server.broadcast(combined_data)
-                
-                # Status reporting
-                frame_count += 1
-                current_time = time.time()
-                current_client_count = len(self.websocket_server.clients)
-                
-                if current_time - last_fps_time >= 5.0:  # Every 5 seconds
-                    fps = frame_count / (current_time - last_fps_time)
-                    
-                    status_msg = f"📊 Status - FPS: {fps:.1f} | Clients: {current_client_count}"
-                    if hand_data and hand_data.get('hands_detected', 0) >= 2:
-                        angle = hand_data.get('steering_angle', 0)
-                        confidence = hand_data.get('confidence', 0)
-                        status_msg += f" | Steering: {angle:6.1f}° ({confidence:.2f})"
-                    
-                    print(status_msg)
-                    frame_count = 0
-                    last_fps_time = current_time
-                
-                # Client connection changes
-                if current_client_count != last_client_count:
-                    print(f"🔗 Clients connected: {current_client_count}")
-                    last_client_count = current_client_count
-                
-                # Control loop timing
-                await asyncio.sleep(0.016)  # ~60 FPS target
-                
-            except KeyboardInterrupt:
-                print("\n🛑 Shutdown requested...")
-                self.running = False
-            except Exception as e:
-                print(f"❌ Error in main loop: {e}")
-                # Continue running on non-critical errors
-                await asyncio.sleep(0.1)
-                
+        except KeyboardInterrupt:
+            print("\nShutdown requested by user")
+        except Exception as e:
+            print(f"Error in main loop: {e}")
+        finally:
+            self.running = False
+            
+            # Final performance report
+            total_time = time.time() - start_time
+            if total_time > 0 and frame_count > 0:
+                final_fps = frame_count / total_time
+                print(f"\n=== Performance Summary ===")
+                print(f"Total runtime: {total_time:.1f}s")
+                print(f"Frames processed: {frame_count}")
+                print(f"Average FPS: {final_fps:.1f}")
+                print(f"Average processing time: {total_process_time/frame_count*1000:.1f}ms per frame")
+                print(f"Average broadcast time: {total_broadcast_time/frame_count*1000:.1f}ms per frame")
+            
     async def run(self):
-        """Run the complete dual-camera system"""
-        print("🎮" + "="*60)
-        print("🎮 GHOST WHEEL - DUAL CAMERA AR SYSTEM")
-        print("🎮" + "="*60)
+        """Main entry point"""
+        print("=== Ghost Wheel Backend - Hand Detection Service ===")
         
-        # Setup cameras
-        if not self.setup_cameras():
-            print("❌ Camera setup failed!")
+        # Setup camera
+        if not self.setup_camera():
+            print("ERROR: Camera setup failed!")
             return
             
         # Initialize hand tracker
         if not self.initialize_hand_tracker():
-            print("❌ Failed to initialize hand tracker!")
+            print("ERROR: Failed to initialize hand tracker!")
             return
             
-        # Initialize AR camera
-        if not self.initialize_ar_camera():
-            print("❌ Failed to initialize AR camera!")
-            return
+        print(f"\nStarting WebSocket server on ws://localhost:8765")
+        
+        try:
+            # Start WebSocket server
+            await self.websocket_server.start()
             
-        # Start WebSocket server
-        print("🔌 Starting WebSocket server...")
-        await self.websocket_server.start()
-        
-        print("\n" + "🎮" + "="*60)
-        print("🎮 SYSTEM READY - DUAL CAMERA MODE")
-        print("🎮" + "="*60)
-        print("📱 Hand tracking: Camera", self.hand_camera_id)
-        print("🎯 AR surface: Camera", self.ar_camera_id) 
-        print("🔗 WebSocket: ws://localhost:8765")
-        print("🌐 Frontend should connect to receive both data streams")
-        print("🎮" + "="*60)
-        print("📋 Instructions:")
-        print("   1. Point AR camera at marker surface")
-        print("   2. Position hands in view of hand tracking camera")
-        print("   3. Open frontend web application")
-        print("   4. Move hands up/down to steer virtual car")
-        print("🎮" + "="*60 + "\n")
-        
-        # Run main processing loop
-        await self.main_loop()
-        
-        # Cleanup
-        print("🧹 Cleaning up...")
-        if self.hand_tracker:
-            self.hand_tracker.cleanup()
-        if self.ar_camera:
-            self.ar_camera.release()
-        cv2.destroyAllWindows()
-        await self.websocket_server.stop()
-        print("✅ System stopped cleanly.")
+            # Run main loop
+            await self.main_loop()
+            
+        except Exception as e:
+            print(f"Error during execution: {e}")
+        finally:
+            # Cleanup
+            print("\nCleaning up...")
+            if self.hand_tracker:
+                self.hand_tracker.cleanup()
+            await self.websocket_server.stop()
+            print("Shutdown complete")
 
 if __name__ == "__main__":
-    try:
-        system = GhostWheelSystem()
-        asyncio.run(system.run())
-    except KeyboardInterrupt:
-        print("\n🛑 Shutdown requested by user")
-    except Exception as e:
-        print(f"💥 System error: {e}")
-        import traceback
-        traceback.print_exc()
+    system = GhostWheelSystem()
+    asyncio.run(system.run())
