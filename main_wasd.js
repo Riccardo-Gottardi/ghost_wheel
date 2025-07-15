@@ -1,78 +1,159 @@
 // Ghost Wheel - WASD Controls
+// Applicazione di realtà aumentata per controllo auto virtuale
+// Autori: Riccardo Gottardi, Alessandro Mattei
+// Corso: Laboratorio di Realtà Aumentata - Università degli Studi di Udine
+
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-// Global variables for camera management
+// ============================================================================
+// VARIABILI GLOBALI PER GESTIONE CAMERA
+// ============================================================================
+
+/**
+ * Stream video corrente dalla webcam
+ * Mantiene il riferimento per poterlo fermare quando necessario
+ */
 let currentStream = null;
+
+/**
+ * Array delle camere disponibili sul dispositivo
+ * Popolato dinamicamente tramite enumerateDevices()
+ */
 let availableCameras = [];
+
+/**
+ * Flag per indicare se il processamento video è già iniziato
+ * Previene inizializzazioni multiple
+ */
 let isProcessingStarted = false;
+
+/**
+ * Flag per prevenire enumerazioni multiple simultanee delle camere
+ * Evita race conditions durante la rilevazione dei dispositivi
+ */
 let isEnumerating = false;
 
-// Global variables for car control system
+// ============================================================================
+// SISTEMA DI CONTROLLO AUTO - VARIABILI GLOBALI
+// ============================================================================
+
+/**
+ * Oggetto principale che contiene tutto il sistema fisico dell'auto
+ * Centralizza posizione, velocità, parametri fisici e stato dei controlli
+ */
 let carSystem = {
-    // Car physics
-    position: { x: 0, z: 0 }, // Virtual position on infinite plane
-    velocity: { x: 0, z: 0 },
-    rotation: 0, // Car rotation in radians
-    speed: 0,
+    // Fisica dell'auto - posizione e movimento nello spazio virtuale
+    position: { x: 0, z: 0 }, // Posizione virtuale su piano infinito
+    velocity: { x: 0, z: 0 }, // Velocità corrente lungo gli assi X e Z
+    rotation: 0,              // Rotazione dell'auto in radianti
+    speed: 0,                 // Velocità scalare calcolata dal vettore velocità
     
-    // Control parameters
-    acceleration: 0.012,
-    maxSpeed: 0.40,
-    turnSpeed: 0.05,
-    friction: 0.95,
-    brakeForce: 0.85,
+    // Parametri di controllo fisico - determinano comportamento realistico
+    acceleration: 0.012,      // Forza di accelerazione per input utente
+    maxSpeed: 0.40,          // Velocità massima raggiungibile
+    turnSpeed: 0.05,         // Velocità di sterzata
+    friction: 0.95,          // Coefficiente di attrito (decelerazione naturale)
+    brakeForce: 0.85,        // Forza frenata quando premuto spazio
     
-    // Input state
+    // Stato corrente degli input utente - traccia tasti premuti
     keys: {
-        forward: false,
-        backward: false,
-        left: false,
-        right: false,
-        brake: false
+        forward: false,   // Tasto W
+        backward: false,  // Tasto S
+        left: false,      // Tasto A
+        right: false,     // Tasto D
+        brake: false      // Tasto Spazio
     }
 };
 
-// AR system variables
+// ============================================================================
+// SISTEMA AR (REALTÀ AUMENTATA) - VARIABILI GLOBALI
+// ============================================================================
+
+/**
+ * Oggetto che gestisce tutto il sistema di realtà aumentata
+ * Controlla stati del marker, matrici di trasformazione e modalità di funzionamento
+ */
 let arSystem = {
-    markerDetected: false,
-    lastDetectionTime: 0,
-    planeMatrix: new THREE.Matrix4(),
-    planePosition: new THREE.Vector3(),
-    planeRotation: new THREE.Euler(),
-    initialized: false,
-    planeEstablished: false,  // Plane established, stop AR processing
-    searchingForMarker: true  // Currently searching for marker
+    markerDetected: false,        // Flag: marker attualmente rilevato
+    lastDetectionTime: 0,         // Timestamp ultimo rilevamento marker
+    planeMatrix: new THREE.Matrix4(), // Matrice di trasformazione del piano AR
+    planePosition: new THREE.Vector3(), // Posizione del piano nello spazio 3D
+    planeRotation: new THREE.Euler(),   // Rotazione del piano nello spazio 3D
+    initialized: false,           // Flag: sistema AR inizializzato
+    planeEstablished: false,      // Flag: piano stabilito, stop processamento AR
+    searchingForMarker: true      // Flag: attualmente in ricerca marker
 };
 
-// Three.js objects
+// ============================================================================
+// OGGETTI THREE.JS - VARIABILI GLOBALI
+// ============================================================================
+
+/**
+ * Oggetti principali per il rendering 3D
+ * scene: contenitore di tutti gli oggetti 3D
+ * camera: punto di vista virtuale
+ * renderer: motore di rendering WebGL
+ * container: contenitore per oggetti AR che segue il marker
+ * carModel: modello 3D dell'auto
+ * gridPlane: griglia di riferimento visuale
+ */
 let scene, camera, renderer, container, carModel, gridPlane;
+
+/**
+ * Controller ARToolKit per riconoscimento marker
+ * arLoaded: flag che indica se ARToolKit è caricato correttamente
+ */
 let arController, arLoaded = false;
 
-// Performance optimization
-let lastProcessTime = 0;
-const processingInterval = 1000 / 30; // 30fps AR processing
+// ============================================================================
+// OTTIMIZZAZIONE PERFORMANCE
+// ============================================================================
 
-// Initialize the application
+/**
+ * Variabili per limitare il processamento AR a 30fps
+ * Migliora performance separando rendering (60fps) da AR processing (30fps)
+ */
+let lastProcessTime = 0;
+const processingInterval = 1000 / 30; // 30fps per processamento AR
+
+// ============================================================================
+// INIZIALIZZAZIONE PRINCIPALE
+// ============================================================================
+
+/**
+ * Punto di ingresso dell'applicazione
+ * Si attiva quando la pagina è completamente caricata
+ * Verifica file necessari e inizializza selezione camera
+ */
 window.onload = function() {
     console.log('🚗 Ghost Wheel starting...');
     
-    // Check for required files
+    // Verifica presenza file richiesti prima di procedere
     checkRequiredFiles().then(() => {
         initializeCameraSelection();
     }).catch((error) => {
         console.warn('Some files missing, starting in fallback mode:', error);
-        initializeCameraSelection();
+        initializeCameraSelection(); // Continua anche senza tutti i file
     });
 }
 
-// Check if required files exist
+/**
+ * Verifica la disponibilità dei file necessari per ARToolKit
+ * Controlla se camera_para.dat e artoolkit.min.js sono accessibili
+ * 
+ * @returns {Promise} Promise che si risolve se tutti i file sono trovati
+ * 
+ * Perché: ARToolKit richiede file specifici per funzionare correttamente.
+ * Se mancano, l'app può funzionare in modalità fallback senza AR.
+ */
 async function checkRequiredFiles() {
     const requiredFiles = [
-        'camera_para.dat',
-        'artoolkit.min.js'
+        'camera_para.dat',    // Parametri calibrazione camera ARToolKit
+        'artoolkit.min.js'    // Libreria ARToolKit minificata
     ];
     
+    // Testa ogni file con richiesta HEAD (solo headers, non content)
     const results = await Promise.allSettled(
         requiredFiles.map(file => 
             fetch(file, { method: 'HEAD' })
@@ -84,6 +165,7 @@ async function checkRequiredFiles() {
         )
     );
     
+    // Identifica file mancanti
     const missing = results
         .filter(result => result.status === 'rejected')
         .map(result => result.reason.message);
@@ -97,16 +179,27 @@ async function checkRequiredFiles() {
     return true;
 }
 
-// Initialize camera selection interface
+/**
+ * Inizializza l'interfaccia di selezione camera
+ * Configura event handlers per selezione camera e refresh
+ * Gestisce il caricamento video e l'avvio del processamento
+ * 
+ * Come: Collega handlers agli elementi DOM, gestisce debouncing per evitare
+ * cambi troppo frequenti, avvia enumerazione camere
+ * 
+ * Perché: L'utente deve poter scegliere quale camera usare se ne ha multiple,
+ * e il sistema deve gestire i cambi di camera senza crash
+ */
 function initializeCameraSelection() {
     const video = document.getElementById("myvideo");
     const cameraSelect = document.getElementById('camera-select');
     const refreshButton = document.getElementById('refresh-cameras');
     
-    // Set up video metadata handler
+    // Handler per quando i metadati video sono caricati
+    // Garantisce che video sia pronto prima di iniziare processamento
     video.onloadedmetadata = () => {
         if (!isProcessingStarted) {
-            // Add small delay to ensure video is fully ready
+            // Piccolo delay per assicurare che video sia completamente pronto
             setTimeout(() => {
                 start_processing();
                 isProcessingStarted = true;
@@ -114,14 +207,14 @@ function initializeCameraSelection() {
         }
     };
     
-    // Debounced camera selection change handler
+    // Handler per cambio camera con debouncing
+    // Debouncing previene cambi troppo rapidi che potrebbero causare problemi
     let changeTimeout;
     cameraSelect.addEventListener('change', async (event) => {
         const selectedDeviceId = event.target.value;
         if (selectedDeviceId && !isEnumerating) {
-            // Clear any pending change
             clearTimeout(changeTimeout);
-            // Debounce the change to prevent rapid switching
+            // Debounce di 200ms per evitare switch rapidi
             changeTimeout = setTimeout(async () => {
                 cameraSelect.disabled = true;
                 await startCameraStream(selectedDeviceId);
@@ -130,7 +223,7 @@ function initializeCameraSelection() {
         }
     });
     
-    // Debounced refresh button handler
+    // Handler per refresh lista camere con debouncing
     let refreshTimeout;
     refreshButton.addEventListener('click', async () => {
         clearTimeout(refreshTimeout);
@@ -143,31 +236,41 @@ function initializeCameraSelection() {
         }, 300);
     });
     
-    // Defer initial camera enumeration to not block UI
+    // Avvia enumerazione camere con delay per non bloccare UI
     setTimeout(() => {
         enumerateAndPopulateCameras();
     }, 500);
 }
 
-// Enumerate and populate available cameras
+/**
+ * Enumera e popola la lista delle camere disponibili
+ * Richiede permessi minimi, enumera dispositivi, popola dropdown
+ * 
+ * Come: Richiede stream temporaneo per ottenere permessi, poi enumera
+ * tutti i dispositivi video, popola il dropdown e gestisce auto-selezione
+ * 
+ * Perché: L'utente deve poter vedere e scegliere tra le camere disponibili.
+ * I permessi sono necessari per enumerare dispositivi con etichette leggibili.
+ */
 async function enumerateAndPopulateCameras() {
-    if (isEnumerating) return; // prevent multiple simultaneous enumerations
+    if (isEnumerating) return; // Previene enumerazioni multiple simultanee
     isEnumerating = true;
     
     const cameraSelect = document.getElementById('camera-select');
     
     try {
-        // Show loading state
+        // Mostra stato di caricamento
         cameraSelect.innerHTML = '<option value="">Detecting cameras...</option>';
         
-        // Request minimal permission first
+        // Richiede permesso minimo per enumerare dispositivi
+        // Stream temporaneo a bassa risoluzione
         const tempStream = await navigator.mediaDevices.getUserMedia({ 
             video: { width: 320, height: 240 }, 
             audio: false 
         });
-        tempStream.getTracks().forEach(track => track.stop()); // immediately stop
+        tempStream.getTracks().forEach(track => track.stop()); // Ferma immediatamente
         
-        // Enumerate devices
+        // Enumera tutti i dispositivi media
         const devices = await navigator.mediaDevices.enumerateDevices();
         availableCameras = devices.filter(device => device.kind === 'videoinput');
         
@@ -178,24 +281,26 @@ async function enumerateAndPopulateCameras() {
             return;
         }
         
-        // Add default option
+        // Aggiunge opzione di default
         cameraSelect.innerHTML = '<option value="">Select a camera...</option>';
         
-        // Populate dropdown with available cameras
+        // Popola dropdown con camere disponibili
         availableCameras.forEach((camera, index) => {
             const option = document.createElement('option');
             option.value = camera.deviceId;
+            // Usa etichetta se disponibile, altrimenti nome generico
             option.textContent = camera.label || `Camera ${index + 1}`;
             cameraSelect.appendChild(option);
         });
         
-        // Auto-select and start first camera if only one available
+        // Auto-selezione intelligente
         if (availableCameras.length === 1) {
+            // Se una sola camera, avviala automaticamente
             cameraSelect.value = availableCameras[0].deviceId;
             await startCameraStream(availableCameras[0].deviceId);
         } else if (availableCameras.length > 1) {
-            // Auto-select first camera but don't start it yet
-            cameraSelect.selectedIndex = 1; // skip "Select a camera..." option
+            // Se multiple, seleziona prima ma non avviare
+            cameraSelect.selectedIndex = 1; // Skip "Select a camera..." option
         }
         
     } catch (error) {
@@ -206,34 +311,45 @@ async function enumerateAndPopulateCameras() {
     }
 }
 
-// Start camera stream with specific device ID
+/**
+ * Avvia lo stream video da una camera specifica
+ * Gestisce cambio camera, ottimizza constraint video, implementa fallback
+ * 
+ * @param {string} deviceId - ID univoco della camera da utilizzare
+ * 
+ * Come: Ferma stream corrente, configura constraint ottimizzati,
+ * richiede nuovo stream, gestisce fallback in caso di errore
+ * 
+ * Perché: Permette switching tra camere multiple e garantisce
+ * performance ottimali con constraint video appropriati
+ */
 async function startCameraStream(deviceId) {
     const video = document.getElementById("myvideo");
     
     try {
-        // Stop current stream if exists
+        // Ferma stream corrente se esistente
         if (currentStream) {
             currentStream.getTracks().forEach(track => track.stop());
             currentStream = null;
         }
         
-        // Optimized constraints for better performance
+        // Constraint ottimizzati per performance AR
         const constraints = {
             audio: false,
             video: {
                 deviceId: deviceId ? { exact: deviceId } : undefined,
-                width: { ideal: 640, max: 1280 },
-                height: { ideal: 480, max: 720 },
-                frameRate: { ideal: 30, max: 30 }
+                width: { ideal: 640, max: 1280 },   // Risoluzione bilanciata
+                height: { ideal: 480, max: 720 },   // per performance AR
+                frameRate: { ideal: 30, max: 30 }   // 30fps costanti
             }
         };
         
-        // Get user media with specific device
+        // Richiede nuovo stream con camera specifica
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         currentStream = stream;
         video.srcObject = stream;
         
-        // Log actual stream settings for debugging
+        // Log per debugging - mostra settings reali ottenuti
         const track = stream.getVideoTracks()[0];
         const settings = track.getSettings();
         console.log('✅ Camera stream started:', {
@@ -245,7 +361,7 @@ async function startCameraStream(deviceId) {
     } catch (error) {
         console.error('Error starting camera stream:', error);
         
-        // Fallback with even lower resolution
+        // Fallback con constraint più permissivi
         try {
             const fallbackConstraints = { 
                 audio: false, 
@@ -261,139 +377,179 @@ async function startCameraStream(deviceId) {
             console.log('Using fallback camera settings');
         } catch (fallbackError) {
             console.error('Fallback also failed, using video file:', fallbackError);
+            // Ultimo fallback: usa file video pre-registrato
             video.src = "marker.webm";
         }
     }
 }
 
-// Main initialization function
+/**
+ * Funzione principale di inizializzazione del sistema
+ * Chiamata quando video è pronto, coordina setup di tutti i sottosistemi
+ * 
+ * Come: Configura canvas, inizializza Three.js, setup AR tracking,
+ * configura controlli keyboard, avvia loop di rendering
+ * 
+ * Perché: Centralizza l'inizializzazione per garantire ordine corretto
+ * di setup di tutti i componenti interdipendenti
+ */
 function start_processing() {
     const video = document.getElementById("myvideo");
     const canvas = document.getElementById("mycanvas");
     
-    // Setup canvas
+    // Configurazione canvas per matchare dimensioni video
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-    video.width = video.height = 0; // Hide video element
+    video.width = video.height = 0; // Nasconde elemento video
     
-    // Initialize Three.js
+    // Inizializzazione sequenziale dei sottosistemi
     setupThreeJS(canvas, video);
-    
-    // Initialize AR tracking
     setupARTracking(video);
-    
-    // Setup keyboard controls
     setupKeyboardControls();
     
-    // Start render loop
+    // Avvia loop principale di rendering
     renderLoop();
     
     console.log('🚗 Ghost Wheel initialized - Use WASD to control the car!');
 }
 
-// Three.js setup
+/**
+ * Configura l'ambiente Three.js per rendering 3D
+ * Inizializza renderer, scene, camera, background video, griglia e modello auto
+ * 
+ * @param {HTMLCanvasElement} canvas - Canvas per rendering WebGL
+ * @param {HTMLVideoElement} video - Elemento video per background
+ * 
+ * Come: Crea renderer WebGL con shadows, configura scene, imposta
+ * texture video come background, crea griglia e carica modello auto
+ * 
+ * Perché: Three.js richiede configurazione specifica per AR:
+ * background video, shadows per realismo, container per tracking marker
+ */
 function setupThreeJS(canvas, video) {
-    // Renderer
+    // Renderer WebGL con anti-aliasing e shadows
     renderer = new THREE.WebGLRenderer({ 
         canvas: canvas,
-        antialias: true,
-        alpha: false
+        antialias: true,    // Smooth dei bordi
+        alpha: false        // Background opaco
     });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Limita per performance
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Shadows soft
     
-    // Scene
+    // Scene principale
     scene = new THREE.Scene();
     
-    // Camera - will be set by ARToolKit
+    // Camera generica - sarà configurata da ARToolKit o fallback
     camera = new THREE.Camera();
     scene.add(camera);
     
-    // Video background
+    // Background video texture con color space corretto
     const videoTexture = new THREE.VideoTexture(video);
-    videoTexture.colorSpace = THREE.SRGBColorSpace;
-    videoTexture.generateMipmaps = false;
-    videoTexture.minFilter = THREE.LinearFilter;
+    videoTexture.colorSpace = THREE.SRGBColorSpace; // Importante per colori corretti
+    videoTexture.generateMipmaps = false;           // Non servono per video
+    videoTexture.minFilter = THREE.LinearFilter;    // Filtro lineare
     videoTexture.magFilter = THREE.LinearFilter;
     scene.background = videoTexture;
     
-    // Container for AR content
+    // Container per contenuto AR - segue il marker
     container = new THREE.Object3D();
-    container.matrixAutoUpdate = false;
+    container.matrixAutoUpdate = false; // Matrice gestita manualmente
     scene.add(container);
     
-    // Create infinite grid plane
+    // Crea griglia infinita per riferimento visuale
     createInfiniteGrid();
     
-    // Load car model
+    // Carica modello 3D dell'auto
     loadCarModel();
     
-    // Lighting
+    // Setup illuminazione realistica
     setupLighting();
 }
 
-// Create infinite grid visualization
+/**
+ * Crea una griglia infinita per riferimento visuale
+ * Griglia colorata con linee centrali evidenziate
+ * 
+ * Come: Genera geometria di linee proceduralmente, colora linee centrali
+ * diversamente, crea material trasparente, posiziona sopra piano
+ * 
+ * Perché: Aiuta l'utente a capire orientamento e movimento su piano infinito.
+ * Linee centrali evidenziate mostrano centro e assi principali.
+ */
 function createInfiniteGrid() {
-    const gridSize = 20;
-    const gridDivisions = 40;
+    const gridSize = 20;        // Dimensione griglia
+    const gridDivisions = 40;   // Numero divisioni
     
-    // Create grid geometry
+    // Geometria procedurale per linee griglia
     const gridGeometry = new THREE.BufferGeometry();
     const vertices = [];
     const colors = [];
     
-    const gridColor = new THREE.Color(0x4CAF50);
-    const centerColor = new THREE.Color(0xFF5722);
+    const gridColor = new THREE.Color(0x4CAF50);   // Verde per linee normali
+    const centerColor = new THREE.Color(0xFF5722); // Rosso per linee centrali
     
-    // Create grid lines
+    // Genera linee griglia
     for (let i = 0; i <= gridDivisions; i++) {
         const position = (i / gridDivisions - 0.5) * gridSize;
         
-        // Vertical lines
+        // Linee verticali (parallele a Z)
         vertices.push(-gridSize/2, 0, position, gridSize/2, 0, position);
-        // Horizontal lines  
+        // Linee orizzontali (parallele a X)
         vertices.push(position, 0, -gridSize/2, position, 0, gridSize/2);
         
-        // Colors - highlight center lines
+        // Colori - evidenzia linee centrali
         const isCenter = i === gridDivisions / 2;
         const color = isCenter ? centerColor : gridColor;
         
+        // Due punti per linea verticale
         colors.push(color.r, color.g, color.b, color.r, color.g, color.b);
+        // Due punti per linea orizzontale
         colors.push(color.r, color.g, color.b, color.r, color.g, color.b);
     }
     
+    // Configura geometria con attributi
     gridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
     gridGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     
-    // Grid material
+    // Material per linee con colori vertex
     const gridMaterial = new THREE.LineBasicMaterial({
         vertexColors: true,
         transparent: true,
         opacity: 0.6,
-        depthWrite: false
+        depthWrite: false  // Evita problemi di depth con altri oggetti
     });
     
+    // Crea mesh e posiziona leggermente sopra piano
     gridPlane = new THREE.LineSegments(gridGeometry, gridMaterial);
-    gridPlane.position.y = 0.01; // Slightly above plane to avoid z-fighting
+    gridPlane.position.y = 0.01; // Evita z-fighting con piano
     container.add(gridPlane);
 }
 
-// Load 3D car model
+/**
+ * Carica il modello 3D dell'auto
+ * Tenta di caricare GLTF, se fallisce crea auto procedurale
+ * 
+ * Come: Usa GLTFLoader per .glb, configura scala e posizione,
+ * abilita shadows, se fallisce crea geometria basic
+ * 
+ * Perché: L'auto 3D rende l'esperienza più immersiva.
+ * Fallback procedurale garantisce funzionamento anche senza asset esterni.
+ */
 function loadCarModel() {
     const loader = new GLTFLoader();
     
-    // Try to load the GLTF model first
+    // Tenta caricamento modello GLTF
     loader.load('retro_cartoon_car.glb', 
-        // Success callback
+        // Callback successo
         (gltf) => {
             carModel = gltf.scene;
             
-            // Setup car properties - DOUBLE SIZE (was 0.3, now 0.6)
-            carModel.scale.set(1.7, 1.7, 1.7);
-            carModel.position.set(0, 0.1, 0); // Slightly higher due to larger size
+            // Configurazione modello - scala aumentata per visibilità
+            carModel.scale.set(1.7, 1.7, 1.7);          // Doppia dimensione originale
+            carModel.position.set(0, 0.1, 0);           // Posizione sopra piano
             
-            // Enable shadows
+            // Abilita shadows per realismo
             carModel.traverse((child) => {
                 if (child.isMesh) {
                     child.castShadow = true;
@@ -404,9 +560,9 @@ function loadCarModel() {
             container.add(carModel);
             console.log('✅ Car model loaded successfully (2x size)');
         }, 
-        // Progress callback
+        // Callback progress - non utilizzato
         undefined, 
-        // Error callback
+        // Callback errore - crea fallback
         (error) => {
             console.warn('GLTF model not found, using fallback car:', error.message);
             createFallbackCar();
@@ -414,54 +570,74 @@ function loadCarModel() {
     );
 }
 
-// Create simple fallback car if GLTF fails to load
+/**
+ * Crea un'auto procedurale semplice se il GLTF fallisce
+ * Costruisce auto basic con geometrie primitive Three.js
+ * 
+ * Come: Crea gruppo, aggiunge body con BoxGeometry,
+ * aggiunge 4 ruote con CylinderGeometry, configura posizioni
+ * 
+ * Perché: Garantisce funzionamento anche senza file esterni.
+ * Auto basic ma riconoscibile mantiene l'esperienza utente.
+ */
 function createFallbackCar() {
     carModel = new THREE.Group();
     
-    // Car body - DOUBLE SIZE (was 0.4x0.15x0.8, now 0.8x0.3x1.6)
-    const bodyGeometry = new THREE.BoxGeometry(0.8, 0.3, 1.6);
+    // Corpo auto - scatola rossa scalata per forma auto
+    const bodyGeometry = new THREE.BoxGeometry(0.8, 0.3, 1.6); // Dimensioni doppie
     const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0xff0000 });
     const carBody = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    carBody.position.y = 0.2; // Higher due to larger size
+    carBody.position.y = 0.2; // Posizione elevata
     carBody.castShadow = true;
     carModel.add(carBody);
     
-    // Car wheels - DOUBLE SIZE (was 0.08, now 0.16)
-    const wheelGeometry = new THREE.CylinderGeometry(0.16, 0.16, 0.1);
+    // Ruote - cilindri neri rotati
+    const wheelGeometry = new THREE.CylinderGeometry(0.16, 0.16, 0.1); // Doppie dimensioni
     const wheelMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
     
-    // Wheel positions adjusted for larger car
+    // Posizioni ruote - adattate per auto più grande
     const wheelPositions = [
-        [-0.3, 0.1, 0.5],   // Front left
-        [0.3, 0.1, 0.5],    // Front right
-        [-0.3, 0.1, -0.5],  // Rear left
-        [0.3, 0.1, -0.5]    // Rear right
+        [-0.3, 0.1, 0.5],   // Anteriore sinistra
+        [0.3, 0.1, 0.5],    // Anteriore destra
+        [-0.3, 0.1, -0.5],  // Posteriore sinistra
+        [0.3, 0.1, -0.5]    // Posteriore destra
     ];
     
     wheelPositions.forEach(pos => {
         const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
         wheel.position.set(...pos);
-        wheel.rotation.z = Math.PI / 2;
+        wheel.rotation.z = Math.PI / 2; // Ruota cilindro per orientamento corretto
         wheel.castShadow = true;
         carModel.add(wheel);
     });
     
-    carModel.position.set(0, 0.04, 0); // Slightly higher due to larger size
+    carModel.position.set(0, 0.04, 0); // Posizione base elevata
     container.add(carModel);
     
     console.log('✅ Fallback car created (2x size)');
 }
 
-// Setup lighting system
+/**
+ * Configura sistema di illuminazione per rendering realistico
+ * Combina luce ambientale e direzionale con shadows
+ * 
+ * Come: Aggiunge AmbientLight per illuminazione generale,
+ * DirectionalLight con shadows per realismo, configura shadow camera
+ * 
+ * Perché: L'illuminazione corretta è essenziale per AR convincente.
+ * Shadows aiutano a "ancorare" oggetti virtuali al mondo reale.
+ */
 function setupLighting() {
-    // Ambient light
+    // Luce ambientale - illuminazione generale diffusa
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     container.add(ambientLight);
     
-    // Directional light with shadows
+    // Luce direzionale con shadows per realismo
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(2, 4, 2);
-    directionalLight.castShadow = true;
+    directionalLight.position.set(2, 4, 2);           // Posizione tipo sole
+    directionalLight.castShadow = true;               // Abilita shadows
+    
+    // Configurazione shadow camera per qualità ottimale
     directionalLight.shadow.mapSize.width = 1024;
     directionalLight.shadow.mapSize.height = 1024;
     directionalLight.shadow.camera.near = 0.1;
@@ -470,14 +646,26 @@ function setupLighting() {
     directionalLight.shadow.camera.right = 5;
     directionalLight.shadow.camera.top = 5;
     directionalLight.shadow.camera.bottom = -5;
+    
     container.add(directionalLight);
 }
 
-// Setup AR marker tracking
+/**
+ * Configura il tracking AR per riconoscimento marker
+ * Inizializza ARController, gestisce callback, configura detection mode
+ * 
+ * @param {HTMLVideoElement} video - Elemento video per processamento AR
+ * 
+ * Come: Crea ARController con parametri camera, configura matrix code detection,
+ * imposta callback per marker detection, gestisce errori con fallback
+ * 
+ * Perché: ARToolKit è il cuore del sistema AR. Setup corretto è critico
+ * per funzionamento. Fallback garantisce funzionalità base senza AR.
+ */
 function setupARTracking(video) {
     console.log('🎯 Initializing AR tracking...');
     
-    // Check if ARController is available
+    // Verifica disponibilità ARController
     if (typeof ARController === 'undefined') {
         console.error('❌ ARController not found - artoolkit.min.js missing?');
         setupFallbackCamera();
@@ -485,13 +673,15 @@ function setupARTracking(video) {
     }
     
     try {
+        // Inizializza ARController con file parametri camera
         arController = new ARController(video, 'camera_para.dat');
         
+        // Callback quando ARController è caricato
         arController.onload = () => {
             try {
                 console.log('✅ AR Controller loaded');
                 
-                // Set camera projection matrix
+                // Imposta matrice proiezione camera da ARToolKit a Three.js
                 const cameraMatrix = arController.getCameraMatrix();
                 if (cameraMatrix && cameraMatrix.length === 16) {
                     camera.projectionMatrix.fromArray(cameraMatrix);
@@ -502,16 +692,16 @@ function setupARTracking(video) {
                     return;
                 }
                 
-                // Configure marker detection for Matrix Code markers
+                // Configura detection per Matrix Code markers (non pattern)
                 arController.setPatternDetectionMode(artoolkit.AR_MATRIX_CODE_DETECTION);
                 console.log('✅ Matrix code detection enabled');
                 
-                // Handle marker detection
+                // Handler per rilevamento marker
                 arController.addEventListener('getMarker', handleMarkerDetection);
                 
                 arLoaded = true;
                 
-                // Update UI to show AR is active
+                // Aggiorna UI per mostrare stato AR attivo
                 document.getElementById('marker-status').textContent = 'Searching...';
                 document.getElementById('marker-status').className = 'status-warning';
                 
@@ -523,6 +713,7 @@ function setupARTracking(video) {
             }
         };
         
+        // Callback errore caricamento ARController
         arController.onerror = (error) => {
             console.error('❌ AR Controller failed to load:', error);
             setupFallbackCamera();
@@ -534,67 +725,100 @@ function setupARTracking(video) {
     }
 }
 
-// Fallback camera setup if AR fails
+/**
+ * Configura camera fallback se AR non disponibile
+ * Crea PerspectiveCamera standard per funzionamento senza marker
+ * 
+ * Come: Sostituisce Camera generica con PerspectiveCamera,
+ * posiziona camera per vista ottimale, marca sistema come inizializzato
+ * 
+ * Perché: Garantisce funzionamento anche senza ARToolKit.
+ * L'utente può comunque controllare l'auto in modalità 3D normale.
+ */
 function setupFallbackCamera() {
     console.log('⚠️ Setting up fallback camera (AR disabled)');
     
-    // Create a basic perspective camera
     const canvas = document.getElementById("mycanvas");
     const aspect = canvas.width / canvas.height;
     
-    // Replace the generic camera with a perspective camera
+    // Sostituisce camera generica con perspective camera
     scene.remove(camera);
     camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1000);
-    camera.position.set(0, 2, 3);
-    camera.lookAt(0, 0, 0);
+    camera.position.set(0, 2, 3);  // Posizione sopra e dietro al centro
+    camera.lookAt(0, 0, 0);        // Guarda verso centro
     scene.add(camera);
     
-    // Set container visible immediately in fallback mode
+    // Marca sistema come inizializzato in modalità fallback
     arSystem.initialized = true;
-    arSystem.markerDetected = false; // No marker detection in fallback
+    arSystem.markerDetected = false; // Nessun marker in fallback
     
     console.log('✅ Fallback camera initialized - Controls work without AR');
     
-    // Show warning in UI
+    // Aggiorna UI per mostrare warning
     document.getElementById('marker-status').textContent = 'AR Disabled (Files Missing)';
     document.getElementById('marker-status').className = 'status-error';
 }
 
-// Handle marker detection events
+/**
+ * Gestisce eventi di rilevamento marker da ARToolKit
+ * Quando marker rilevato, stabilisce piano di riferimento e ferma ricerca
+ * 
+ * @param {Event} event - Evento con dati marker da ARToolKit
+ * 
+ * Come: Verifica ID marker valido, aggiorna riferimento piano,
+ * cambia stati sistema, aggiorna UI, mostra istruzioni
+ * 
+ * Perché: Il marker serve solo per stabilire il piano iniziale.
+ * Una volta stabilito, il sistema passa a tracking virtuale.
+ */
 function handleMarkerDetection(event) {
+    // Verifica marker valido (ID diverso da -1)
     if (event.data.marker.idMatrix !== -1 && arSystem.searchingForMarker) {
         console.log(`🎯 Marker detected! ID: ${event.data.marker.idMatrix}`);
         
-        // Update plane reference from marker
+        // Aggiorna riferimento piano da matrice marker
         updatePlaneReference(event.data.matrixGL_RH);
         
+        // Aggiorna stati sistema AR
         arSystem.markerDetected = true;
         arSystem.lastDetectionTime = performance.now();
-        arSystem.planeEstablished = true;  // PLANE ESTABLISHED!
-        arSystem.searchingForMarker = false; // STOP SEARCHING!
+        arSystem.planeEstablished = true;    // PIANO STABILITO!
+        arSystem.searchingForMarker = false; // STOP RICERCA!
         
-        // Update UI
+        // Aggiorna UI con conferma
         document.getElementById('marker-status').textContent = `Plane Set (ID: ${event.data.marker.idMatrix}) - Marker Removed`;
         document.getElementById('marker-status').className = 'status-good';
         
-        // Log success
+        // Log istruzioni per utente
         console.log('🎉 AR Plane established! You can now:');
         console.log('   1. Remove the marker from camera view');
         console.log('   2. Use WASD to drive on the virtual infinite plane');
         console.log('   3. Press R to reset and search for marker again');
         
-        // Show instructions in UI briefly
+        // Mostra istruzioni temporanee in UI
         showInstructions('✅ Plane Set! Remove marker, use WASD to drive. Press R to reset.');
     }
 }
 
-// Show temporary instruction message
+/**
+ * Mostra messaggio di istruzioni temporaneo sovrapposto
+ * Crea overlay semi-trasparente con auto-hide
+ * 
+ * @param {string} message - Messaggio da mostrare
+ * 
+ * Come: Crea o aggiorna div overlay con stili CSS,
+ * posiziona al centro, applica auto-hide dopo 4 secondi
+ * 
+ * Perché: Feedback visuale importante per guidare utente
+ * attraverso fasi critiche del setup AR.
+ */
 function showInstructions(message) {
-    // Create or update instruction overlay
+    // Cerca overlay esistente o creane uno nuovo
     let overlay = document.getElementById('instruction-overlay');
     if (!overlay) {
         overlay = document.createElement('div');
         overlay.id = 'instruction-overlay';
+        // Stili inline per overlay centrato e accattivante
         overlay.style.cssText = `
             position: fixed;
             top: 50%;
@@ -617,70 +841,105 @@ function showInstructions(message) {
     overlay.textContent = message;
     overlay.style.display = 'block';
     
-    // Auto-hide after 4 seconds
+    // Auto-hide dopo 4 secondi
     setTimeout(() => {
         if (overlay) overlay.style.display = 'none';
     }, 4000);
 }
 
-// Update the virtual plane reference from marker matrix
+/**
+ * Aggiorna il riferimento del piano virtuale da matrice marker
+ * Salva matrice di trasformazione per uso futuro senza marker
+ * 
+ * @param {Array} markerMatrix - Matrice 4x4 dal marker ARToolKit
+ * 
+ * Come: Corregge orientamento matrice, estrae posizione/rotazione,
+ * marca sistema come inizializzato
+ * 
+ * Perché: Il piano di riferimento permette tracking senza marker fisico.
+ * Salva relazione spaziale tra mondo reale e virtuale.
+ */
 function updatePlaneReference(markerMatrix) {
-    // Store the plane transformation matrix
+    // Salva matrice trasformazione con correzione orientamento
     fixMatrix(arSystem.planeMatrix, markerMatrix);
     
-    // Extract position and rotation for reference
+    // Estrae posizione e rotazione per riferimento
     arSystem.planePosition.setFromMatrixPosition(arSystem.planeMatrix);
     arSystem.planeRotation.setFromRotationMatrix(arSystem.planeMatrix);
     
-    // Mark as initialized
+    // Marca sistema come inizializzato se prima volta
     if (!arSystem.initialized) {
         arSystem.initialized = true;
         console.log('Virtual plane initialized');
     }
 }
 
-// Fix marker matrix orientation
+/**
+ * Corregge orientamento matrice marker per compatibilità Three.js
+ * Applica rotazione 90° su X per convertire Z-up a Y-up
+ * 
+ * @param {THREE.Matrix4} three_mat - Matrice Three.js di destinazione
+ * @param {Array} m - Array matrice da ARToolKit
+ * 
+ * Come: Riordina elementi matrice applicando rotazione 90° X,
+ * converte da colonna-major ad ordine Three.js
+ * 
+ * Perché: ARToolKit usa Z-up, Three.js usa Y-up.
+ * Correzione necessaria per allineamento corretto oggetti.
+ */
 function fixMatrix(three_mat, m) {
+    // Matrice con rotazione 90° su X applicata
+    // Converte da Z-up (ARToolKit) a Y-up (Three.js)
     three_mat.set(
-        m[0], m[8], -m[4], m[12],
-        m[1], m[9], -m[5], m[13],
-        m[2], m[10], -m[6], m[14],
-        m[3], m[11], -m[7], m[15]
+        m[0], m[8], -m[4], m[12],    // Riga 1
+        m[1], m[9], -m[5], m[13],    // Riga 2  
+        m[2], m[10], -m[6], m[14],   // Riga 3
+        m[3], m[11], -m[7], m[15]    // Riga 4
     );
 }
 
-// Setup keyboard controls
+/**
+ * Configura controlli tastiera per movimento auto
+ * Mappa tasti a stati, gestisce eventi keydown/keyup, tasti speciali
+ * 
+ * Come: Definisce mapping tasti->azioni, aggiunge event listeners
+ * per keydown/keyup, gestisce tasti speciali R e G
+ * 
+ * Perché: Controlli intuitivi WASD standard per gaming.
+ * Gestione keydown/keyup permette movimento fluido e multi-tasto.
+ */
 function setupKeyboardControls() {
-    // Key mappings
+    // Mapping tasti a azioni auto
     const keyMap = {
-        'KeyW': 'forward',
-        'KeyS': 'backward', 
-        'KeyA': 'left',
-        'KeyD': 'right',
-        'Space': 'brake'
+        'KeyW': 'forward',   // W - Avanti
+        'KeyS': 'backward',  // S - Indietro
+        'KeyA': 'left',      // A - Sinistra
+        'KeyD': 'right',     // D - Destra
+        'Space': 'brake'     // Spazio - Freno
     };
     
-    // Key down events
+    // Handler pressione tasti
     document.addEventListener('keydown', (event) => {
+        // Gestisce tasti movimento
         if (keyMap[event.code]) {
             event.preventDefault();
             carSystem.keys[keyMap[event.code]] = true;
         }
         
-        // Special keys
+        // Gestisce tasti speciali
         switch(event.code) {
             case 'KeyR':
                 event.preventDefault();
-                resetCarPosition();
+                resetCarPosition(); // Reset sistema e ricerca marker
                 break;
             case 'KeyG':
                 event.preventDefault();
-                toggleGrid();
+                toggleGrid();       // Toggle visibilità griglia
                 break;
         }
     });
     
-    // Key up events
+    // Handler rilascio tasti
     document.addEventListener('keyup', (event) => {
         if (keyMap[event.code]) {
             event.preventDefault();
@@ -691,11 +950,20 @@ function setupKeyboardControls() {
     console.log('Keyboard controls initialized');
 }
 
-// Reset car to center position
+/**
+ * Reset completo sistema: posizione auto e ricerca nuovo marker
+ * Riporta tutto allo stato iniziale per nuovo setup
+ * 
+ * Come: Azzera fisica auto, reset stati AR per ricerca marker,
+ * aggiorna UI, mostra istruzioni
+ * 
+ * Perché: Permette all'utente di riposizionare sistema o correggere
+ * setup errato senza ricaricare pagina.
+ */
 function resetCarPosition() {
     console.log('🔄 Resetting system - searching for marker...');
     
-    // Reset car physics
+    // Reset completo fisica auto
     carSystem.position.x = 0;
     carSystem.position.z = 0;
     carSystem.velocity.x = 0;
@@ -703,23 +971,31 @@ function resetCarPosition() {
     carSystem.rotation = 0;
     carSystem.speed = 0;
     
-    // Reset AR system to search for marker again
+    // Reset stati AR per nuova ricerca marker
     arSystem.planeEstablished = false;
     arSystem.searchingForMarker = true;
     arSystem.markerDetected = false;
     arSystem.initialized = false;
     
-    // Update UI
+    // Aggiorna UI per stato ricerca
     document.getElementById('marker-status').textContent = 'Searching for Marker...';
     document.getElementById('marker-status').className = 'status-warning';
     
-    // Show instructions
+    // Mostra istruzioni per nuovo setup
     showInstructions('🔍 Place matrix marker in front of camera to set new plane');
     
     console.log('🎯 Ready for new marker detection');
 }
 
-// Toggle grid visibility
+/**
+ * Toggle visibilità griglia di riferimento
+ * Permette nascondere/mostrare griglia per preferenza utente
+ * 
+ * Come: Inverte proprietà visible della griglia, aggiorna UI
+ * 
+ * Perché: Alcuni utenti potrebbero preferire vista senza griglia
+ * per esperienza più pulita.
+ */
 function toggleGrid() {
     if (gridPlane) {
         gridPlane.visible = !gridPlane.visible;
@@ -728,11 +1004,20 @@ function toggleGrid() {
     }
 }
 
-// Update car physics and movement
+/**
+ * Aggiorna fisica e movimento dell'auto
+ * Calcola accelerazione, rotazione, velocità, applica limiti e attrito
+ * 
+ * Come: Legge input utente, calcola forze, aggiorna velocità/posizione,
+ * applica vincoli fisici, aggiorna posizione visuale
+ * 
+ * Perché: Simulazione fisica realistica rende controlli naturali.
+ * Inerzia, attrito e limiti prevengono comportamenti irrealistici.
+ */
 function updateCarPhysics() {
     const keys = carSystem.keys;
     
-    // Calculate acceleration based on input
+    // Calcola accelerazione basata su input utente
     let acceleration = 0;
     
     if (keys.forward) {
@@ -741,13 +1026,14 @@ function updateCarPhysics() {
         acceleration = -carSystem.acceleration;
     }
     
-    // Apply braking
+    // Applica frenata se richiesta
     if (keys.brake) {
         carSystem.velocity.x *= carSystem.brakeForce;
         carSystem.velocity.z *= carSystem.brakeForce;
     }
     
-    // Update rotation based on turning input and current speed
+    // Aggiorna rotazione basata su sterzata e velocità corrente
+    // Sterzata efficace solo se auto in movimento
     if (keys.left && Math.abs(carSystem.speed) > 0.01) {
         carSystem.rotation += carSystem.turnSpeed * Math.sign(carSystem.speed);
     }
@@ -755,19 +1041,19 @@ function updateCarPhysics() {
         carSystem.rotation -= carSystem.turnSpeed * Math.sign(carSystem.speed);
     }
     
-    // Calculate velocity based on acceleration and rotation
+    // Calcola componenti velocità in direzione auto
     const cos = Math.cos(carSystem.rotation);
     const sin = Math.sin(carSystem.rotation);
     
-    // Apply acceleration in car's forward direction
+    // Applica accelerazione in direzione corrente auto
     carSystem.velocity.x += acceleration * sin;
     carSystem.velocity.z += acceleration * cos;
     
-    // Apply friction
+    // Applica attrito per decelerazione naturale
     carSystem.velocity.x *= carSystem.friction;
     carSystem.velocity.z *= carSystem.friction;
     
-    // Calculate speed and limit maximum
+    // Calcola velocità scalare e applica limite massimo
     carSystem.speed = Math.sqrt(carSystem.velocity.x ** 2 + carSystem.velocity.z ** 2);
     
     if (carSystem.speed > carSystem.maxSpeed) {
@@ -777,59 +1063,91 @@ function updateCarPhysics() {
         carSystem.speed = carSystem.maxSpeed;
     }
     
-    // Update position
+    // Aggiorna posizione basata su velocità
     carSystem.position.x += carSystem.velocity.x;
     carSystem.position.z += carSystem.velocity.z;
     
-    // Update car model transform if it exists
+    // Aggiorna posizione visuale modello 3D
     if (carModel && arSystem.initialized) {
         updateCarVisualPosition();
     }
     
-    // Update UI
+    // Aggiorna display UI
     updateUI();
 }
 
-// Update car visual position in 3D space
+/**
+ * Aggiorna posizione visuale del modello auto nello spazio 3D
+ * Sincronizza modello 3D con stato fisica
+ * 
+ * Come: Copia posizione/rotazione da sistema fisica a modello 3D,
+ * mantiene elevazione costante sopra piano
+ * 
+ * Perché: Separazione tra logica fisica e rendering permette
+ * modifiche indipendenti e debug più facile.
+ */
 function updateCarVisualPosition() {
     if (!carModel) return;
     
-    // Set car position and rotation
+    // Sincronizza posizione e rotazione con fisica
     carModel.position.x = carSystem.position.x;
     carModel.position.z = carSystem.position.z;
     carModel.rotation.y = carSystem.rotation;
     
-    // Keep car slightly above ground (higher due to larger size)
+    // Mantiene auto leggermente sopra piano per visibilità shadows
     carModel.position.y = 0.1;
 }
 
-// Update UI status information
+/**
+ * Aggiorna informazioni UI in tempo reale
+ * Mostra velocità, posizione, stato marker negli overlay
+ * 
+ * Come: Formatta valori numerici, aggiorna textContent elementi,
+ * determina stato marker basato su flags sistema
+ * 
+ * Perché: Feedback real-time aiuta utente capire stato sistema
+ * e debug problemi. Informazioni tecniche utili per sviluppo.
+ */
 function updateUI() {
+    // Aggiorna velocità con 2 decimali
     document.getElementById('speed-value').textContent = carSystem.speed.toFixed(2);
+    
+    // Aggiorna posizione con 1 decimale
     document.getElementById('position-value').textContent = 
         `${carSystem.position.x.toFixed(1)}, ${carSystem.position.z.toFixed(1)}`;
     
-    // Update marker status based on current state
+    // Determina e aggiorna stato marker
     if (arSystem.planeEstablished) {
-        // Plane is established, marker can be removed
+        // Piano stabilito, marker può essere rimosso
         document.getElementById('marker-status').textContent = 'Plane Active (Marker Removed)';
         document.getElementById('marker-status').className = 'status-good';
     } else if (arSystem.searchingForMarker) {
-        // Currently searching for marker
+        // Ricerca attiva marker
         document.getElementById('marker-status').textContent = 'Searching for Marker...';
         document.getElementById('marker-status').className = 'status-warning';
     } else if (!arLoaded) {
-        // AR disabled
+        // AR disabilitato
         document.getElementById('marker-status').textContent = 'AR Disabled (Files Missing)';
         document.getElementById('marker-status').className = 'status-error';
     }
 }
 
-// Main render loop
+/**
+ * Loop principale di rendering - cuore dell'applicazione
+ * Coordina processamento AR, fisica auto, rendering a 60fps
+ * 
+ * @param {number} currentTime - Timestamp corrente per timing
+ * 
+ * Come: Usa requestAnimationFrame per 60fps, processa AR a 30fps,
+ * aggiorna fisica ogni frame, sincronizza container con AR
+ * 
+ * Perché: Separazione timing ottimizza performance. AR a 30fps sufficiente,
+ * fisica a 60fps per controlli fluidi. Rendering continuo per smoothness.
+ */
 function renderLoop(currentTime) {
-    requestAnimationFrame(renderLoop);
+    requestAnimationFrame(renderLoop); // Mantiene loop attivo
     
-    // Process AR tracking ONLY if searching for marker and not yet established
+    // Processamento AR solo se necessario e con throttling a 30fps
     const shouldProcessAR = arLoaded && 
                            arController && 
                            arSystem.searchingForMarker && 
@@ -838,6 +1156,7 @@ function renderLoop(currentTime) {
     
     if (shouldProcessAR) {
         try {
+            // Processa frame video per rilevamento marker
             arController.process(document.getElementById("myvideo"));
             lastProcessTime = currentTime;
         } catch (error) {
@@ -845,33 +1164,50 @@ function renderLoop(currentTime) {
         }
     }
     
-    // Update car physics every frame (this runs at full 60fps)
+    // Aggiorna fisica auto ogni frame (60fps per controlli fluidi)
     updateCarPhysics();
     
-    // Update container visibility and position
+    // Aggiorna visibilità e trasformazione container AR
     updateContainerTransform();
     
-    // Render the scene
+    // Rendering finale scena
     renderer.render(scene, camera);
 }
 
-// Update container transform based on AR state
+/**
+ * Aggiorna trasformazione container basata su stato AR
+ * Gestisce visibilità e posizionamento contenuto AR
+ * 
+ * Come: Determina visibilità da stato sistema, applica matrice
+ * di trasformazione salvata quando piano stabilito
+ * 
+ * Perché: Container deve apparire solo quando appropriato e
+ * seguire correttamente il piano di riferimento stabilito.
+ */
 function updateContainerTransform() {
-    // Show container if plane is established OR we're in fallback mode
+    // Mostra container se piano stabilito O modalità fallback attiva
     if (arSystem.planeEstablished || (!arLoaded && arSystem.initialized)) {
         container.visible = true;
         
-        // Apply the stored plane transformation matrix
+        // Applica matrice trasformazione salvata dal marker
         if (arSystem.planeMatrix) {
             container.matrix.copy(arSystem.planeMatrix);
         }
     } else {
-        // Hide container while searching for marker
+        // Nasconde container durante ricerca marker
         container.visible = false;
     }
 }
 
-// Cleanup function for camera streams
+/**
+ * Funzione cleanup per stream camera
+ * Ferma tutti i track video quando applicazione chiude
+ * 
+ * Come: Itera su tutti i track dello stream, li ferma e disabilita
+ * 
+ * Perché: Libera risorse hardware camera quando non più necessaria.
+ * Previene camera "bloccata" dopo chiusura pagina.
+ */
 function cleanup() {
     if (currentStream) {
         currentStream.getTracks().forEach(track => {
@@ -883,6 +1219,8 @@ function cleanup() {
     }
 }
 
-// Enhanced cleanup with performance considerations
+// Registra cleanup per eventi chiusura pagina
+// beforeunload: chiusura normale
+// pagehide: navigazione mobile/tab switching
 window.addEventListener('beforeunload', cleanup);
 window.addEventListener('pagehide', cleanup);

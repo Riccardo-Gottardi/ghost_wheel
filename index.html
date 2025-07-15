@@ -3,6 +3,11 @@
 <head>
 	<meta charset="UTF-8">
 	<title>Ghost Wheel - WASD Controls</title>
+	
+	<!-- 
+	Import map per Three.js - definisce alias per moduli ES6
+	Permette import puliti come "import * as THREE from 'three'"
+	-->
 	<script type="importmap">
 		{
 			"imports": {
@@ -11,34 +16,57 @@
 		  }
 		}
 	</script>
+	
+	<!-- 
+	ARToolKit library - deve essere caricata prima del modulo principale
+	Fornisce funzionalità di riconoscimento marker per AR
+	-->
 	<script src="artoolkit.min.js"></script>
+	
+	<!-- 
+	Modulo principale dell'applicazione 
+	type="module" abilita import/export ES6
+	-->
 	<script type="module" src="main_wasd.js"></script>
+	
 	<style>
+		/* Reset base per body - rimuove margini e padding di default */
 		body {
 			margin: 0;
 			font-family: Arial, sans-serif;
-			overflow: hidden;
-			background: #000;
+			overflow: hidden;    /* Nasconde scrollbar per esperienza fullscreen */
+			background: #000;    /* Background nero per contrasto con video */
 		}
+		
+		/* 
+		Controlli camera - pannello top-left per selezione dispositivo
+		Position fixed per rimanere sempre visibile sopra contenuto
+		*/
 		#camera-controls {
 			position: fixed;
 			top: 10px;
 			left: 10px;
-			z-index: 1000;
-			background: rgba(0, 0, 0, 0.8);
+			z-index: 1000;              /* Z-index alto per stare sopra tutto */
+			background: rgba(0, 0, 0, 0.8);  /* Background semi-trasparente */
 			padding: 10px;
 			border-radius: 5px;
 			color: white;
 			font-size: 14px;
-			backdrop-filter: blur(5px);
-			transition: opacity 0.3s ease;
+			backdrop-filter: blur(5px);  /* Effetto blur moderno */
+			transition: opacity 0.3s ease;  /* Transizione smooth per auto-hide */
 		}
+		
+		/* Stato nascosto per auto-hide dopo inattività */
 		#camera-controls.hidden {
 			opacity: 0.3;
 		}
+		
+		/* Sempre visibile al hover */
 		#camera-controls:hover {
 			opacity: 1 !important;
 		}
+		
+		/* Dropdown selezione camera */
 		#camera-select {
 			margin-left: 10px;
 			padding: 5px;
@@ -47,10 +75,14 @@
 			background: white;
 			min-width: 150px;
 		}
+		
+		/* Stile disabled per dropdown */
 		#camera-select:disabled {
 			opacity: 0.6;
 			cursor: not-allowed;
 		}
+		
+		/* Bottone refresh camera */
 		#refresh-cameras {
 			margin-left: 10px;
 			padding: 5px 10px;
@@ -61,13 +93,22 @@
 			cursor: pointer;
 			transition: background-color 0.2s ease;
 		}
+		
+		/* Hover effect per bottone */
 		#refresh-cameras:hover:not(:disabled) {
 			background: #005a87;
 		}
+		
+		/* Stile disabled per bottone */
 		#refresh-cameras:disabled {
 			background: #666;
 			cursor: not-allowed;
 		}
+		
+		/* 
+		Pannello informazioni controlli - mostra mapping tasti
+		Posizionato sotto controlli camera per non sovrapporsi
+		*/
 		#controls-info {
 			position: fixed;
 			top: 80px;
@@ -81,29 +122,44 @@
 			backdrop-filter: blur(5px);
 			transition: opacity 0.3s ease;
 		}
+		
+		/* Auto-hide per controlli dopo inattività */
 		#controls-info.hidden {
 			opacity: 0.3;
 		}
+		
+		/* Sempre visibile al hover */
 		#controls-info:hover {
 			opacity: 1 !important;
 		}
+		
+		/* Titolo pannello controlli */
 		.controls-title {
 			font-weight: bold;
 			margin-bottom: 10px;
-			color: #4CAF50;
+			color: #4CAF50;  /* Verde per evidenziare */
 		}
+		
+		/* Singola riga controllo - layout flex per allineamento */
 		.control-item {
 			margin: 5px 0;
 			display: flex;
 			justify-content: space-between;
 			min-width: 200px;
 		}
+		
+		/* Stile per visualizzazione tasti */
 		.key {
 			background: #333;
 			padding: 2px 6px;
 			border-radius: 3px;
-			font-family: monospace;
+			font-family: monospace;  /* Font monospace per uniformità */
 		}
+		
+		/* 
+		Pannello status informazioni - top-right
+		Mostra stato marker, velocità, posizione in tempo reale
+		*/
 		#status-info {
 			position: fixed;
 			top: 10px;
@@ -116,24 +172,40 @@
 			font-size: 12px;
 			backdrop-filter: blur(5px);
 		}
+		
+		/* Styling per singoli elementi status */
 		.status-item {
 			margin: 3px 0;
 		}
-		.status-good { color: #4CAF50; }
-		.status-warning { color: #FF9800; }
-		.status-error { color: #f44336; }
+		
+		/* Color coding per stati diversi */
+		.status-good { color: #4CAF50; }     /* Verde - tutto ok */
+		.status-warning { color: #FF9800; }  /* Arancione - attenzione */
+		.status-error { color: #f44336; }    /* Rosso - errore */
+		
+		/* 
+		Elementi video e canvas 
+		display: block rimuove spazio inline di default
+		max-width/height prevengono overflow su schermi piccoli
+		*/
 		#myvideo, #mycanvas {
 			display: block;
 			max-width: 100vw;
 			max-height: 100vh;
 		}
-		/* Hide controls after 10 seconds */
+		
+		/* Auto-hide generico per controlli dopo timeout */
 		#camera-controls.auto-hide, #controls-info.auto-hide {
 			opacity: 0.3;
 		}
 	</style>
 </head> 
+
 <body>
+	<!-- 
+	Pannello controlli camera 
+	Permette selezione tra camere multiple e refresh lista
+	-->
 	<div id="camera-controls">
 		<label for="camera-select">Camera:</label>
 		<select id="camera-select">
@@ -142,6 +214,10 @@
 		<button id="refresh-cameras">Refresh</button>
 	</div>
 
+	<!-- 
+	Pannello informazioni controlli 
+	Mostra mapping tasti per guidare utente
+	-->
 	<div id="controls-info">
 		<div class="controls-title">🎮 Ghost Wheel Controls</div>
 		<div class="control-item">
@@ -167,6 +243,10 @@
 		</div>
 	</div>
 
+	<!-- 
+	Pannello status sistema 
+	Informazioni real-time su stato marker, velocità, posizione
+	-->
 	<div id="status-info">
 		<div class="status-item">Marker: <span id="marker-status" class="status-error">Not Detected</span></div>
 		<div class="status-item">Car Speed: <span id="speed-value">0.0</span></div>
@@ -174,31 +254,57 @@
 		<div class="status-item">Grid: <span id="grid-status">Visible</span></div>
 	</div>
 
+	<!-- 
+	Elemento video per stream webcam
+	autoplay: avvia automaticamente quando stream assegnato
+	muted: necessario per autoplay su browser moderni
+	Dimensioni impostate a 0 via JS per nascondere elemento
+	-->
 	<video autoplay muted id="myvideo"></video>
+	
+	<!-- 
+	Canvas per rendering Three.js
+	Dimensioni impostate dinamicamente per matchare video
+	-->
 	<canvas id="mycanvas"></canvas>
 	
 	<script>
-		// Auto-hide controls after inactivity
+		/* 
+		Sistema auto-hide per controlli UI
+		Nasconde controlli dopo 10 secondi di inattività
+		Migliora esperienza immersiva riducendo clutter
+		*/
+		
 		let hideTimeout;
 		const controls = document.getElementById('controls-info');
 		const cameraControls = document.getElementById('camera-controls');
 		
+		/**
+		 * Reset timer auto-hide
+		 * Mostra controlli e riavvia timer 10 secondi
+		 */
 		function resetHideTimer() {
 			clearTimeout(hideTimeout);
 			controls.classList.remove('auto-hide');
 			cameraControls.classList.remove('hidden');
+			
+			// Nuovo timer per auto-hide
 			hideTimeout = setTimeout(() => {
 				controls.classList.add('auto-hide');
 				cameraControls.classList.add('hidden');
-			}, 10000);
+			}, 10000);  // 10 secondi
 		}
 		
-		// Reset timer on user interaction
+		/* 
+		Event listeners per attività utente
+		Qualsiasi interazione resetta timer auto-hide
+		passive: true per performance su touch events
+		*/
 		['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'].forEach(event => {
 			document.addEventListener(event, resetHideTimer, { passive: true });
 		});
 		
-		// Initial timer
+		// Avvia timer iniziale
 		resetHideTimer();
 	</script>
 </body>
