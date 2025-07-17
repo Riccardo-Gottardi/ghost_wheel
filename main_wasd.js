@@ -127,7 +127,7 @@ const processingInterval = 1000 / 30; // 30fps per processamento AR
  * Verifica file necessari e inizializza selezione camera
  */
 window.onload = function() {
-    console.log('🚗 Ghost Wheel starting...');
+    console.log('Ghost Wheel starting...');
     
     // Verifica presenza file richiesti prima di procedere
     checkRequiredFiles().then(() => {
@@ -159,7 +159,7 @@ async function checkRequiredFiles() {
             fetch(file, { method: 'HEAD' })
                 .then(response => {
                     if (!response.ok) throw new Error(`${file} not found`);
-                    console.log(`✅ Found: ${file}`);
+                    console.log(`Found: ${file}`);
                     return file;
                 })
         )
@@ -171,11 +171,11 @@ async function checkRequiredFiles() {
         .map(result => result.reason.message);
     
     if (missing.length > 0) {
-        console.warn('❌ Missing files:', missing.join(', '));
+        console.warn('Missing files:', missing.join(', '));
         throw new Error(`Missing: ${missing.join(', ')}`);
     }
     
-    console.log('✅ All required files found');
+    console.log('All required files found');
     return true;
 }
 
@@ -293,15 +293,6 @@ async function enumerateAndPopulateCameras() {
             cameraSelect.appendChild(option);
         });
         
-        // Auto-selezione intelligente
-        if (availableCameras.length === 1) {
-            // Se una sola camera, avviala automaticamente
-            cameraSelect.value = availableCameras[0].deviceId;
-            await startCameraStream(availableCameras[0].deviceId);
-        } else if (availableCameras.length > 1) {
-            // Se multiple, seleziona prima ma non avviare
-            cameraSelect.selectedIndex = 1; // Skip "Select a camera..." option
-        }
         
     } catch (error) {
         console.error('Error enumerating cameras:', error);
@@ -352,7 +343,7 @@ async function startCameraStream(deviceId) {
         // Log per debugging - mostra settings reali ottenuti
         const track = stream.getVideoTracks()[0];
         const settings = track.getSettings();
-        console.log('✅ Camera stream started:', {
+        console.log(' Camera stream started:', {
             resolution: `${settings.width}x${settings.height}`,
             frameRate: settings.frameRate,
             deviceId: settings.deviceId
@@ -401,7 +392,7 @@ function start_processing() {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     video.width = video.height = 0; // Nasconde elemento video
-    
+
     // Inizializzazione sequenziale dei sottosistemi
     setupThreeJS(canvas, video);
     setupARTracking(video);
@@ -410,7 +401,7 @@ function start_processing() {
     // Avvia loop principale di rendering
     renderLoop();
     
-    console.log('🚗 Ghost Wheel initialized - Use WASD to control the car!');
+    console.log('Ghost Wheel initialized - Use WASD to control the car!');
 }
 
 /**
@@ -558,7 +549,7 @@ function loadCarModel() {
             });
             
             container.add(carModel);
-            console.log('✅ Car model loaded successfully (2x size)');
+            console.log(' Car model loaded successfully (2x size)');
         }, 
         // Callback progress - non utilizzato
         undefined, 
@@ -614,7 +605,7 @@ function createFallbackCar() {
     carModel.position.set(0, 0.04, 0); // Posizione base elevata
     container.add(carModel);
     
-    console.log('✅ Fallback car created (2x size)');
+    console.log(' Fallback car created (2x size)');
 }
 
 /**
@@ -663,11 +654,11 @@ function setupLighting() {
  * per funzionamento. Fallback garantisce funzionalità base senza AR.
  */
 function setupARTracking(video) {
-    console.log('🎯 Initializing AR tracking...');
+    console.log('Initializing AR tracking...');
     
     // Verifica disponibilità ARController
     if (typeof ARController === 'undefined') {
-        console.error('❌ ARController not found - artoolkit.min.js missing?');
+        console.error('ARController not found - artoolkit.min.js missing?');
         setupFallbackCamera();
         return;
     }
@@ -679,22 +670,22 @@ function setupARTracking(video) {
         // Callback quando ARController è caricato
         arController.onload = () => {
             try {
-                console.log('✅ AR Controller loaded');
+                console.log(' AR Controller loaded');
                 
                 // Imposta matrice proiezione camera da ARToolKit a Three.js
                 const cameraMatrix = arController.getCameraMatrix();
                 if (cameraMatrix && cameraMatrix.length === 16) {
                     camera.projectionMatrix.fromArray(cameraMatrix);
-                    console.log('✅ Camera matrix applied');
+                    console.log(' Camera matrix applied');
                 } else {
-                    console.error('❌ Invalid camera matrix');
+                    console.error('Invalid camera matrix');
                     setupFallbackCamera();
                     return;
                 }
                 
                 // Configura detection per Matrix Code markers (non pattern)
                 arController.setPatternDetectionMode(artoolkit.AR_MATRIX_CODE_DETECTION);
-                console.log('✅ Matrix code detection enabled');
+                console.log(' Matrix code detection enabled');
                 
                 // Handler per rilevamento marker
                 arController.addEventListener('getMarker', handleMarkerDetection);
@@ -705,22 +696,22 @@ function setupARTracking(video) {
                 document.getElementById('marker-status').textContent = 'Searching...';
                 document.getElementById('marker-status').className = 'status-warning';
                 
-                console.log('🎯 AR System ready - Show matrix marker to camera');
+                console.log('AR System ready - Show matrix marker to camera');
                 
             } catch (error) {
-                console.error('❌ Error in AR controller setup:', error);
+                console.error('Error in AR controller setup:', error);
                 setupFallbackCamera();
             }
         };
         
         // Callback errore caricamento ARController
         arController.onerror = (error) => {
-            console.error('❌ AR Controller failed to load:', error);
+            console.error('AR Controller failed to load:', error);
             setupFallbackCamera();
         };
         
     } catch (error) {
-        console.error('❌ Failed to create AR Controller:', error);
+        console.error('Failed to create AR Controller:', error);
         setupFallbackCamera();
     }
 }
@@ -736,7 +727,7 @@ function setupARTracking(video) {
  * L'utente può comunque controllare l'auto in modalità 3D normale.
  */
 function setupFallbackCamera() {
-    console.log('⚠️ Setting up fallback camera (AR disabled)');
+    console.log('Setting up fallback camera (AR disabled)');
     
     const canvas = document.getElementById("mycanvas");
     const aspect = canvas.width / canvas.height;
@@ -752,7 +743,7 @@ function setupFallbackCamera() {
     arSystem.initialized = true;
     arSystem.markerDetected = false; // Nessun marker in fallback
     
-    console.log('✅ Fallback camera initialized - Controls work without AR');
+    console.log(' Fallback camera initialized - Controls work without AR');
     
     // Aggiorna UI per mostrare warning
     document.getElementById('marker-status').textContent = 'AR Disabled (Files Missing)';
@@ -774,7 +765,7 @@ function setupFallbackCamera() {
 function handleMarkerDetection(event) {
     // Verifica marker valido (ID diverso da -1)
     if (event.data.marker.idMatrix !== -1 && arSystem.searchingForMarker) {
-        console.log(`🎯 Marker detected! ID: ${event.data.marker.idMatrix}`);
+        console.log(`Marker detected! ID: ${event.data.marker.idMatrix}`);
         
         // Aggiorna riferimento piano da matrice marker
         updatePlaneReference(event.data.matrixGL_RH);
@@ -796,7 +787,7 @@ function handleMarkerDetection(event) {
         console.log('   3. Press R to reset and search for marker again');
         
         // Mostra istruzioni temporanee in UI
-        showInstructions('✅ Plane Set! Remove marker, use WASD to drive. Press R to reset.');
+        showInstructions(' Plane Set! Remove marker, use WASD to drive. Press R to reset.');
     }
 }
 
@@ -984,7 +975,7 @@ function resetCarPosition() {
     // Mostra istruzioni per nuovo setup
     showInstructions('🔍 Place matrix marker in front of camera to set new plane');
     
-    console.log('🎯 Ready for new marker detection');
+    console.log('Ready for new marker detection');
 }
 
 /**

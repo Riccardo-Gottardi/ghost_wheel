@@ -183,6 +183,13 @@
 		.status-warning { color: #FF9800; }  /* Arancione - attenzione */
 		.status-error { color: #f44336; }    /* Rosso - errore */
 		
+		#ar-display-container {
+			display: flex;
+			justify-content: center; 
+			align-items: center;;
+			width: 100vw;  
+			height: 100vh; 
+		}
 		/* 
 		Elementi video e canvas 
 		display: block rimuove spazio inline di default
@@ -253,20 +260,24 @@
 		<div class="status-item">Position: <span id="position-value">0, 0</span></div>
 		<div class="status-item">Grid: <span id="grid-status">Visible</span></div>
 	</div>
-
-	<!-- 
-	Elemento video per stream webcam
-	autoplay: avvia automaticamente quando stream assegnato
-	muted: necessario per autoplay su browser moderni
-	Dimensioni impostate a 0 via JS per nascondere elemento
-	-->
-	<video autoplay muted id="myvideo"></video>
 	
-	<!-- 
-	Canvas per rendering Three.js
-	Dimensioni impostate dinamicamente per matchare video
-	-->
-	<canvas id="mycanvas"></canvas>
+	<div id="ar-display-container">
+		<div id="mycontainer">
+			<!-- 
+			Elemento video per stream webcam
+			autoplay: avvia automaticamente quando stream assegnato
+			muted: necessario per autoplay su browser moderni
+			Dimensioni impostate a 0 via JS per nascondere elemento
+			-->
+			<video autoplay muted id="myvideo"></video>
+			
+			<!-- 
+			Canvas per rendering Three.js
+			Dimensioni impostate dinamicamente per matchare video
+			-->
+			<canvas id="mycanvas"></canvas>
+		</div>
+	</div>
 	
 	<script>
 		/* 
